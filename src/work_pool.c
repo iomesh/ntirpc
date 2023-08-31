@@ -159,6 +159,7 @@ work_pool_thread(void *arg)
 	snprintf(wpt->worker_name, sizeof(wpt->worker_name), "%.5s%" PRIu32,
 		 pool->name, wpt->worker_index);
 	__ntirpc_pkg_params.thread_name_(wpt->worker_name);
+	pthread_setname_np(wpt->pt, wpt->worker_name);
 
 	do {
 		/* testing at top of loop allows pre-specification of work,
