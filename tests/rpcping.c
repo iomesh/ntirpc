@@ -34,6 +34,7 @@
 #include <rpc/rpc.h>
 #include <rpc/svc_auth.h>
 
+
 #include "lttng/ntirpc_traces.h"
 #if defined(USE_LTTNG_NTIRPC) && !defined(LTTNG_PARSING)
 #include "lttng/generated_traces/rpcping.h"
@@ -254,6 +255,7 @@ int main(int argc, char *argv[])
 	int proc = 0;
 	int send_sz = 8192;
 	int recv_sz = 8192;
+	int page_sz = sysconf(_SC_PAGESIZE);
 	unsigned int failures = 0;
 	unsigned int timeouts = 0;
 	bool rpcbind = false;
@@ -334,7 +336,7 @@ int main(int argc, char *argv[])
 					   "clnt_ncreate failed");
 				exit(2);
 			}
-		} else {
+		} else if (strcmp(proto, "rdma")) {
 			/* connect to host:port */
 			struct sockaddr_storage ss;
 			struct netbuf raddr = {
@@ -356,7 +358,20 @@ int main(int argc, char *argv[])
 					   "clnt_ncreate failed");
 				exit(4);
 			}
+		} else {
+			int fd = get_conn_fd(host, port);
+			if (fd <= 0) {
+				perror("get_conn_fd failed");
+				exit(3);
+			}
+			clnt = clnt_rdma_create(fd, "10.53.87.150", 20049, recv_sz,
+			    send_sz, page_sz, prog, vers, CLNT_CREATE_FLAG_CLOSE);
+			if (CLNT_FAILURE(clnt)) {
+				rpc_perror(&clnt->cl_error, "clnt_rdma_create failed");
+				exit(4);
+			}
 		}
+
 		s = &states[i];
 		clnt->cl_u1 = s;
 

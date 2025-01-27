@@ -450,7 +450,8 @@ clnt_req_xid_cmpf(const struct opr_rbtree_node *lhs,
 enum clnt_stat
 clnt_req_callback(struct clnt_req *cc)
 {
-	svc_rqst_expire_insert(cc);
+	if (!cc->cc_clnt->rdma_clnt)
+		svc_rqst_expire_insert(cc);
 
 	return CLNT_CALL_ONCE(cc);
 }
@@ -525,6 +526,9 @@ clnt_req_setup(struct clnt_req *cc, struct timespec timeout)
 	cc->cc_refreshes = 2;
 	cc->cc_timeout = timeout;
 
+	if (cc->cc_clnt->rdma_clnt)
+		goto out;
+
 	if (timeout.tv_nsec < 0 || timeout.tv_nsec > 999999999
 	 || timeout.tv_sec < 0) {
 		__warnx(TIRPC_DEBUG_FLAG_ERROR,
@@ -553,6 +557,7 @@ clnt_req_setup(struct clnt_req *cc, struct timespec timeout)
 		return (RPC_TLIERROR);
 	}
 
+out:
 	CLNT_REF(clnt, CLNT_REF_FLAG_NONE);
 	return (RPC_SUCCESS);
 }
@@ -703,7 +708,8 @@ clnt_req_release(struct clnt_req *cc)
 		return (refs);
 	}
 
-	clnt_req_reset(cc);
+	if (!cc->cc_clnt->rdma_clnt)
+		clnt_req_reset(cc);
 	clnt_req_fini(cc);
 	CLNT_RELEASE(cc->cc_clnt, CLNT_RELEASE_FLAG_NONE);
 

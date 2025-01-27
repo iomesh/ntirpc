@@ -55,6 +55,7 @@
 #include "rpc_com.h"
 #include "clnt_internal.h"
 #include "rpc_rdma.h"
+#include "gsh_rpc.h"
 
 #define MAX_DEFAULT_FDS		 20000
 
@@ -88,29 +89,71 @@ clnt_rdma_data_zalloc(void)
  * followed by CLNT_DESTROY() as necessary.
  */
 CLIENT *
-clnt_rdma_ncreatef(RDMAXPRT *rdma_xprt,		/* init but NOT connect()ed */
+clnt_rdma_ncreatef(const SVCXPRT *xprt,		/* init but NOT connect()ed */
 		   const rpcprog_t program,
 		   const rpcvers_t version,
-		   const u_int flags)
+		   const u_int flags, bool create)
 {
 	struct cm_data *cm = clnt_rdma_data_zalloc();
 	CLIENT *cl = &cm->cm_cx.cx_c;
 	struct rpc_msg call_msg;
 	XDR xdrs[1];		/* temp XDR stream */
 
-	cl->cl_ops = clnt_rdma_ops();
-
-	if (!rdma_xprt || rdma_xprt->state != RDMAXS_INITIAL) {
-		__warnx(TIRPC_DEBUG_FLAG_ERROR,
-			"%s: %p@%p called with invalid transport address",
-			__func__, cl, rdma_xprt);
-		cl->cl_error.re_status = RPC_UNKNOWNADDR;
-		return (cl);
+	RDMAXPRT *rdma_xprt = NULL;
+	if (create)
+		rdma_xprt = rpc_rdma_allocate(((RDMAXPRT *)xprt)->xa);
+	else {
+		rdma_xprt = (RDMAXPRT *)xprt;
+		rdma_xprt->shared = true;
 	}
-	cm->cm_cx.cx_rec = &rdma_xprt->sm_dr;
 
-	rpc_rdma_connect(rdma_xprt);
-	rpc_rdma_connect_finalize(rdma_xprt);
+	cm->cm_cx.cx_rec = &rdma_xprt->sm_dr;
+	cl->cl_ops = clnt_rdma_ops();
+	cl->rdma_clnt = true;
+
+	if (create) {
+		/* Copy remote ip */
+		svc_rdma_ops(&rdma_xprt->sm_dr.xprt);
+
+		rdma_xprt->sm_dr.xprt.xp_ip = gsh_malloc(SOCK_NAME_MAX);
+		memcpy(rdma_xprt->sm_dr.xprt.xp_ip, xprt->xp_ip, SOCK_NAME_MAX);
+		rdma_xprt->sm_dr.xprt.xp_port = xprt->xp_port;
+
+		__warnx(TIRPC_DEBUG_FLAG_EVENT, "%s: create rdma clnt ip %s port %d",
+			__func__, rdma_xprt->sm_dr.xprt.xp_ip, rdma_xprt->sm_dr.xprt.xp_port);
+
+		rdma_xprt->server = RDMAX_CLIENT;
+
+		if (!rdma_xprt || rdma_xprt->state != RDMAXS_INITIAL) {
+			__warnx(TIRPC_DEBUG_FLAG_ERROR,
+				"%s: %p@%p called with invalid transport address",
+				__func__, cl, rdma_xprt);
+			cl->cl_error.re_status = RPC_UNKNOWNADDR;
+			return (cl);
+		}
+
+		if (rpc_rdma_connect_prepare(rdma_xprt)) {
+			__warnx(TIRPC_DEBUG_FLAG_ERROR, "%s: failed", __func__);
+			cl->cl_error.re_status = RPC_UNKNOWNADDR;
+			return (cl);
+		}
+		rpc_rdma_connect(rdma_xprt);
+		rpc_rdma_connect_finalize(rdma_xprt);
+
+		struct rpc_dplx_rec *rec = REC_XPRT(xprt);
+		rdma_xprt->sm_dr.recvsz = rec->recvsz;
+		rdma_xprt->sm_dr.sendsz = rec->sendsz;
+		rdma_xprt->sm_dr.pagesz = rec->pagesz;
+
+		rdma_xprt->sm_dr.recv_hdr_sz = rec->recv_hdr_sz;
+		rdma_xprt->sm_dr.send_hdr_sz = rec->send_hdr_sz;
+
+		if (xdr_rdma_create(rdma_xprt)) {
+			__warnx(TIRPC_DEBUG_FLAG_ERROR,
+				"%s: buffer allocation failed", __func__);
+			return (cl);
+		}
+	}
 
 	/*
 	 * initialize call message
@@ -165,15 +208,13 @@ clnt_rdma_call(struct clnt_req *cc)
 	XDR *xdrs;
 	u_int32_t *uint32p;
 
-	/* free old buffers (should do nothing) */
-	xdr_ioq_release(&cbc->recvq.ioq_uv.uvqh);
-	xdr_ioq_release(&cbc->sendq.ioq_uv.uvqh);
-	xdr_rdma_callq(rdma_xprt);
+	cc->cc_timeout.tv_sec = cc->cc_timeout.tv_nsec = 0;
 
 	cbc->recvq.xdrs[0].x_lib[1] =
 	cbc->sendq.xdrs[0].x_lib[1] = rdma_xprt;
 
-	(void) xdr_rdma_ioq_uv_fetch(&cbc->sendq, &rdma_xprt->outbufs_data.uvqh,
+	/* Use hdr buffer since callbacks don't contain data */
+	(void) xdr_rdma_ioq_uv_fetch(&cbc->sendq, &rdma_xprt->outbufs_hdr.uvqh,
 				"call buffer", 1, IOQ_FLAG_NONE);
 	xdr_ioq_reset(&cbc->sendq, 0);
 
@@ -194,14 +235,20 @@ clnt_rdma_call(struct clnt_req *cc)
 		__warnx(TIRPC_DEBUG_FLAG_CLNT_RDMA,
 			"%s: %p@%p failed",
 			__func__, cl, cx->cx_rec);
-		xdr_ioq_release(&cbc->sendq.ioq_uv.uvqh);
+		cbc_release_it(cbc);;
 		return (RPC_CANTENCODEARGS);
 	}
 	mutex_unlock(&cl->cl_lock);
 
+	/* send request */
 	if (!xdr_rdma_clnt_flushout(cbc)) {
 		cl->cl_error.re_errno = errno;
 		return (RPC_CANTSEND);
+	}
+
+	if (!rdma_xprt->shared) {
+		/* recv response */
+		xdr_rdma_callq(rdma_xprt, 1);
 	}
 
 	return (RPC_SUCCESS);
