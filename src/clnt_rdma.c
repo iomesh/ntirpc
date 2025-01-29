@@ -220,6 +220,7 @@ clnt_rdma_call(struct clnt_req *cc)
 
 	xdrs = cbc->sendq.xdrs;
 	cc->cc_error.re_status = RPC_SUCCESS;
+	xdrs->x_op = XDR_ENCODE;
 
 	mutex_lock(&cl->cl_lock);
 	uint32p = (u_int32_t *)&cx->cx_mcallc[0];
