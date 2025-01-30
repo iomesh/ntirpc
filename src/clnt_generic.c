@@ -450,6 +450,10 @@ clnt_req_xid_cmpf(const struct opr_rbtree_node *lhs,
 enum clnt_stat
 clnt_req_callback(struct clnt_req *cc)
 {
+	/* Fixme need to expire pending rdma requests,
+	 * waiting for response with some timeout.
+	 * We can do it as part
+	 * of cq handler similar to epoll thread for tcp*/
 	if (!cc->cc_clnt->rdma_clnt)
 		svc_rqst_expire_insert(cc);
 

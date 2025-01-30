@@ -241,15 +241,10 @@ clnt_rdma_call(struct clnt_req *cc)
 	}
 	mutex_unlock(&cl->cl_lock);
 
-	/* send request */
+	/* send request and recv response */
 	if (!xdr_rdma_clnt_flushout(cbc)) {
 		cl->cl_error.re_errno = errno;
 		return (RPC_CANTSEND);
-	}
-
-	if (!rdma_xprt->shared) {
-		/* recv response */
-		xdr_rdma_callq(rdma_xprt, 1);
 	}
 
 	return (RPC_SUCCESS);

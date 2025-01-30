@@ -66,8 +66,8 @@
 static void
 rpcrdma_dump_msg(struct xdr_ioq_uv *data, char *comment, uint32_t xid)
 {
-	//if (!__debug_flag(TIRPC_DEBUG_FLAG_XDR))
-		//return;
+	if (!__debug_flag(TIRPC_DEBUG_FLAG_XDR))
+		return;
 
 	char *buffer;
 	uint8_t *datum = data->v.vio_head;
@@ -711,7 +711,7 @@ xdr_rdma_sync_send_cb(RDMAXPRT *rdma_xprt, struct rpc_rdma_cbc *cbc, int sge)
 		    __func__, ret, errno, rdma_xprt, cbc, cbc->refcnt,
 		    write_waits);
 	}
-	rpc_rdma_cq_event_handler(rdma_xprt, 1);
+	rpc_rdma_cq_event_handler(rdma_xprt, 2);
 
 	return ret;
 }
