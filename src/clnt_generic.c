@@ -526,8 +526,10 @@ clnt_req_setup(struct clnt_req *cc, struct timespec timeout)
 	cc->cc_refreshes = 2;
 	cc->cc_timeout = timeout;
 
-	if (cc->cc_clnt->rdma_clnt)
+	if (cc->cc_clnt->rdma_clnt) {
+		cc->cc_xid = ++(rec->call_xid);
 		goto out;
+	}
 
 	if (timeout.tv_nsec < 0 || timeout.tv_nsec > 999999999
 	 || timeout.tv_sec < 0) {

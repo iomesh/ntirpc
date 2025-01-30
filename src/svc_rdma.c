@@ -229,6 +229,11 @@ svc_rdma_decode(struct svc_req *req)
 		return (XPRT_DIED);
 	}
 
+	/* Reply for cb call */
+	if (req->rq_msg.rm_direction == REPLY) {
+		return (XPRT_IDLE);
+	}
+
 	/* the checksum */
 	req->rq_cksum = 0;
 

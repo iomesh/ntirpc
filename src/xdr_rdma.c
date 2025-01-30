@@ -2011,13 +2011,17 @@ xdr_rdma_clnt_flushout(struct rpc_rdma_cbc *cbc)
 	RDMAXPRT *rdma_xprt = x_rdma_xprt(cbc->sendq.xdrs);
 	struct rpc_msg *msg;
 	struct rdma_msg *rmsg;
-	struct xdr_write_list *w_array;
 	struct xdr_ioq_uv *head_uv;
 	struct xdr_ioq_uv *hold_uv;
-	struct poolq_entry *have;
-	int i = 0;
 
+	/* hold NFS request */
 	hold_uv = IOQ_(TAILQ_FIRST(&cbc->sendq.ioq_uv.uvqh.qh));
+
+	pthread_mutex_lock(&cbc->sendq.ioq_uv.uvqh.qmutex);
+	TAILQ_REMOVE(&cbc->sendq.ioq_uv.uvqh.qh, &hold_uv->uvq, q);
+	(cbc->sendq.ioq_uv.uvqh.qcount)--;
+	pthread_mutex_unlock(&cbc->sendq.ioq_uv.uvqh.qmutex);
+
 	msg = (struct rpc_msg *)(hold_uv->v.vio_head);
 	xdr_tail_update(cbc->sendq.xdrs);
 
@@ -2042,9 +2046,6 @@ xdr_rdma_clnt_flushout(struct rpc_rdma_cbc *cbc)
 	head_uv = IOQ_(xdr_rdma_ioq_uv_fetch(&cbc->sendq, &rdma_xprt->outbufs_hdr.uvqh,
 					"c_head buffer", 1, IOQ_FLAG_NONE));
 
-	(void)xdr_rdma_ioq_uv_fetch(&cbc->dataq, &rdma_xprt->outbufs_hdr.uvqh,
-				"call buffers", num_chunks, IOQ_FLAG_NONE);
-
 	rmsg = m_(head_uv->v.vio_head);
 	rmsg->rdma_xid = msg->rm_xid;
 	rmsg->rdma_vers = htonl(RPCRDMA_VERSION);
@@ -2054,25 +2055,15 @@ xdr_rdma_clnt_flushout(struct rpc_rdma_cbc *cbc)
 	/* no read, write chunks. */
 	rmsg->rdma_body.rdma_msg.rdma_reads = 0; /* htonl(0); */
 	rmsg->rdma_body.rdma_msg.rdma_writes = 0; /* htonl(0); */
-
-	/* reply chunk */
-	w_array = (wl_t *)&rmsg->rdma_body.rdma_msg.rdma_reply;
-	w_array->present = htonl(1);
-	w_array->elements = htonl(num_chunks);
-
-	TAILQ_FOREACH(have, &cbc->dataq.ioq_uv.uvqh.qh, q) {
-		struct xdr_rdma_segment *w_seg =
-			&w_array->entry[i++].target;
-		uint32_t length = ioquv_length(IOQ_(have));
-
-		w_seg->handle = htonl(rdma_xprt->mr->rkey);
-		w_seg->length = htonl(length);
-		xdr_encode_hyper((uint32_t*)&w_seg->offset,
-				 (uintptr_t)IOQ_(have)->v.vio_head);
-	}
+	rmsg->rdma_body.rdma_msg.rdma_reply = 0;
 
 	head_uv->v.vio_tail = head_uv->v.vio_head
 				+ xdr_rdma_header_length(rmsg);
+
+	pthread_mutex_lock(&cbc->sendq.ioq_uv.uvqh.qmutex);
+	TAILQ_INSERT_TAIL(&cbc->sendq.ioq_uv.uvqh.qh, &hold_uv->uvq, q);
+	(cbc->sendq.ioq_uv.uvqh.qcount)++;
+	pthread_mutex_unlock(&cbc->sendq.ioq_uv.uvqh.qmutex);
 
 	rpcrdma_dump_msg(head_uv, "clnthead", msg->rm_xid);
 	rpcrdma_dump_msg(hold_uv, "clntcall", msg->rm_xid);
