@@ -6,7 +6,7 @@ SET(ntirpcmonitoring_SRCS
   monitoring.cc
 )
 
-add_library(ntirpcmonitoring ${ntirpcmonitoring_SRCS})
+add_library(ntirpcmonitoring SHARED ${ntirpcmonitoring_SRCS})
 add_sanitizers(ntirpcmonitoring)
 set_target_properties(ntirpcmonitoring PROPERTIES COMPILE_FLAGS "-fPIC")
 target_include_directories(ntirpcmonitoring     PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/prometheus-cpp-lite/core/include)
