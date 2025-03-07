@@ -59,6 +59,9 @@
 #include <urcu-bp.h>
 
 #include <rpc/work_pool.h>
+#ifdef USE_MONITORING
+#include "metrics_libntirpc.h"
+#endif
 
 #define WORK_POOL_STACK_SIZE MAX(1 * 1024 * 1024, PTHREAD_STACK_MIN)
 #define WORK_POOL_TIMEOUT_MS (31 /* seconds (prime) */ * 1000)
@@ -174,6 +177,9 @@ work_pool_thread(void *arg)
 			      && pool->n_threads < pool->params.thrd_max;
 			if (spawn)
 				pool->n_threads++;
+#ifdef USE_MONITORING
+			metrics_libntirpc_update_threads_info_gauge(pool->n_threads,pool->params.thrd_max);
+#endif
 			pthread_mutex_unlock(&pool->pqh.qmutex);
 
 			if (spawn) {
@@ -251,6 +257,9 @@ work_pool_thread(void *arg)
 		 pool->pqh.qcount < pool->params.thrd_min);
 
 	pool->n_threads--;
+#ifdef USE_MONITORING
+	metrics_libntirpc_update_threads_info_gauge(pool->n_threads,pool->params.thrd_max);
+#endif
 	pthread_mutex_unlock(&pool->pqh.qmutex);
 
 	__warnx(TIRPC_DEBUG_FLAG_WORKER,
