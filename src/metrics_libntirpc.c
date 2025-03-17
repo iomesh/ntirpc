@@ -30,6 +30,11 @@ get_generic_op_status_name(generic_op_status_t op_status)
 
 /* Concurrent TCP Connections */
 static gauge_metric_handle_t concurrent_tcp_metric;
+
+/* Thread utilization metrics */
+static gauge_metric_handle_t threads_scheduled;
+static gauge_metric_handle_t threads_schedulable;
+
 static bool initialized = false;
 
 /* For each security-flavor as an array index, assign a serial number to be
@@ -215,6 +220,19 @@ static const char *get_svc_auth_op_string(svc_auth_op_t op)
 	}
 }
 
+void register_gss_threads_metrics(void)
+{
+	const metric_label_t empty_labels[] = {};
+	threads_scheduled = monitoring__register_gauge(
+		"Threads_currently_scheduled",
+		METRIC_METADATA("no.of threads in usage", METRIC_UNIT_NONE),
+		empty_labels, ARRAY_SIZE(empty_labels));
+	threads_schedulable = monitoring__register_gauge(
+		"threads_schedulable",
+		METRIC_METADATA("no.of threads schedulable", METRIC_UNIT_NONE),
+		empty_labels, ARRAY_SIZE(empty_labels));
+}
+
 static void register_svc_auth_request_latency_metric(void)
 {
 	int sf, as;
@@ -326,6 +344,13 @@ static void register_gss_svc_auth_ops_latency_metric(void)
 #endif
 }
 
+void metrics_libntirpc_update_threads_info_gauge(
+	uint32_t under_utilization_thrds, uint32_t schedulable_thrds_count)
+{
+	monitoring__gauge_set(threads_scheduled, under_utilization_thrds);
+	monitoring__gauge_set(threads_schedulable, schedulable_thrds_count);
+}
+
 void metrics_libntirpc_observe_svc_auth_request_latency(
 	int sec_flavor, enum auth_stat auth_status,
 	const struct timespec *latency)
@@ -339,6 +364,7 @@ void metrics_libntirpc_observe_svc_auth_request_latency(
 }
 
 #ifdef _HAVE_GSSAPI
+
 void metrics_libntirpc_observe_gss_svc_auth_step_latency(
 	gss_svc_auth_step_t step, rpc_gss_svc_t svc, bool step_succeeded,
 	const struct timespec *latency)
@@ -376,10 +402,9 @@ void metrics_libntirpc_init(void)
 		"libntirpc__tcp_connections_count",
 		METRIC_METADATA("TCP connections count", METRIC_UNIT_NONE),
 		empty_labels, ARRAY_SIZE(empty_labels));
-
+	register_gss_threads_metrics();
 	register_svc_auth_request_latency_metric();
 	register_gss_svc_auth_steps_latency_metric();
 	register_gss_svc_auth_ops_latency_metric();
-
 	initialized = true;
 }

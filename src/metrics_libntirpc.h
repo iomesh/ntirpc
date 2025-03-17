@@ -25,6 +25,9 @@ typedef enum svc_auth_op {
 void metrics_libntirpc_update_tcp_connection_count(int connection_count);
 void metrics_libntirpc_observe_svc_auth_request_latency(
 	int sec_flavor, enum auth_stat, const struct timespec *latency);
+void register_gss_threads_metrics(void);
+void metrics_libntirpc_update_threads_info_gauge(uint32_t under_utilization_thrds, uint32_t schedulable_thrds_count);
+
 #ifdef _HAVE_GSSAPI
 void metrics_libntirpc_observe_gss_svc_auth_step_latency(
 	gss_svc_auth_step_t, rpc_gss_svc_t, bool step_succeeded,
