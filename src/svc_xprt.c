@@ -369,6 +369,12 @@ svc_xprt_foreach(svc_xprt_each_func_t each_f, void *arg)
 			rec = opr_containerof(n, struct rpc_dplx_rec, fd_node);
 			sk.xprt.xp_fd = rec->xprt.xp_fd;
 
+			/* Take ref since we want to clear SVC_XPRT_TREE_LOCKED
+			 * which will be done after calling svc_rqst_clean_func,
+			 * so there is chance of xprt getting already destroyed
+			 * before we get chance to clear xp_flags, which will be
+			 * use after free */
+			SVC_REF(&rec->xprt, SVC_REF_FLAG_NONE);
 			/* Intimate the inner APIs that tree is locked */
 			atomic_set_uint16_t_bits(
 				&rec->xprt.xp_flags, SVC_XPRT_TREE_LOCKED);
@@ -380,6 +386,7 @@ svc_xprt_foreach(svc_xprt_each_func_t each_f, void *arg)
 				atomic_clear_uint16_t_bits(
 					&rec->xprt.xp_flags,
 					SVC_XPRT_TREE_LOCKED);
+				SVC_RELEASE(&rec->xprt, SVC_RELEASE_FLAG_NONE);
 				/* already cleaned */
 				rwlock_unlock(&t->lock);
 				/* t !LOCKED */
@@ -394,6 +401,7 @@ svc_xprt_foreach(svc_xprt_each_func_t each_f, void *arg)
 					atomic_clear_uint16_t_bits(
 						&rec->xprt.xp_flags,
 						SVC_XPRT_TREE_LOCKED);
+					SVC_RELEASE(&rec->xprt, SVC_RELEASE_FLAG_NONE);
 					/* invalidated, try harder */
 					rwlock_unlock(&t->lock);
 							/* t !LOCKED */
@@ -403,6 +411,7 @@ svc_xprt_foreach(svc_xprt_each_func_t each_f, void *arg)
 			/* If exits earlier, clear the flag explicitly */
 			atomic_clear_uint16_t_bits(
 				&rec->xprt.xp_flags, SVC_XPRT_TREE_LOCKED);
+			SVC_RELEASE(&rec->xprt, SVC_RELEASE_FLAG_NONE);
 			n = opr_rbtree_next(n);
 		}		/* curr partition */
 		rwlock_unlock(&t->lock); /* t !LOCKED */
