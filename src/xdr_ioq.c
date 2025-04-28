@@ -994,9 +994,16 @@ xdr_ioq_getstartdatapos_rdma(XDR *xdrs, u_int start, u_int datalen)
 	 * nfs_buffer, so calculate offset for end of nfs_buffer */
 	if (datalen > ((uintptr_t)xdrs->x_v.vio_tail - (uintptr_t)xdrs->x_data)) {
 		offset = (uintptr_t)xdrs->x_v.vio_tail - (uintptr_t)xdrs->x_data;
+		return start + offset;
 	}
 
-	return start + offset;
+	/*
+	 * Small RDMA Writes
+	 * If data is inline, it should be part of nfs_buffer itself.
+	 * So, to avoid the ILLEGAL_OP, start should advance by datalen
+	 * to pick the correct OP while decoding the COMPOUND ops.
+	 */
+	return start + datalen;
 
 }
 
