@@ -435,7 +435,7 @@ class CmakeRulesGenerator:
 
   def _get_file_hash(self, file: str) -> str:
     hash_len = 6
-    return hashlib.md5(file.encode()).hexdigest()[:hash_len]
+    return hashlib.sha512(file.encode()).hexdigest()[:hash_len]
 
   def _generate_file_properties(self, dependant_files: Iterable[str]) -> str:
     out = ""
