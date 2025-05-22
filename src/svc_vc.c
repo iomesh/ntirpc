@@ -828,7 +828,7 @@ static enum haproxy_ret_code handle_haproxy_header(SVCXPRT *xprt)
 	rlen = recv(xprt->xp_fd, rest, sizeof(rest), MSG_WAITALL | MSG_PEEK);
 	if (rlen != sizeof(rest)) {
 		__warnx(TIRPC_DEBUG_FLAG_ERROR,
-			"%s: %p fd %d proxy header failed rest rlen = %z "
+			"%s: %p fd %d proxy header failed rest rlen = %zd "
 			"(will set dead)",
 			__func__, xprt, xprt->xp_fd, rlen);
 		return HAPROXY_RET_CODE__FAILURE;
@@ -850,7 +850,7 @@ static enum haproxy_ret_code handle_haproxy_header(SVCXPRT *xprt)
 	rlen = recv(xprt->xp_fd, rest, sizeof(rest), MSG_WAITALL);
 	if (rlen != sizeof(rest)) {
 		__warnx(TIRPC_DEBUG_FLAG_ERROR,
-			"%s: %p fd %d proxy header failed rest rlen = %z "
+			"%s: %p fd %d proxy header failed rest rlen = %zd "
 			"(will set dead)",
 			__func__, xprt, xprt->xp_fd, rlen);
 		return HAPROXY_RET_CODE__FAILURE;
@@ -860,7 +860,7 @@ static enum haproxy_ret_code handle_haproxy_header(SVCXPRT *xprt)
 
 	if (rlen != sizeof(s)) {
 		__warnx(TIRPC_DEBUG_FLAG_ERROR,
-			"%s: %p fd %d proxy header failed header rlen = %z "
+			"%s: %p fd %d proxy header failed header rlen = %zd "
 			"(will set dead)",
 			__func__, xprt, xprt->xp_fd, rlen);
 		return HAPROXY_RET_CODE__FAILURE;
@@ -870,7 +870,7 @@ static enum haproxy_ret_code handle_haproxy_header(SVCXPRT *xprt)
 	if (unlikely(s.len > sizeof(pa))) {
 		__warnx(TIRPC_DEBUG_FLAG_ERROR,
 			"%s: %p fd %d incorrect proxy header "
-			"addr len = %z (will set dead)",
+			"addr len = %zd (will set dead)",
 			__func__, xprt, xprt->xp_fd, s.len);
 		return HAPROXY_RET_CODE__FAILURE;
 	}
@@ -880,7 +880,7 @@ static enum haproxy_ret_code handle_haproxy_header(SVCXPRT *xprt)
 	if (rlen != s.len) {
 		__warnx(TIRPC_DEBUG_FLAG_ERROR,
 			"%s: %p fd %d proxy header rest len failed header "
-			"rlen = %z (will set dead)",
+			"rlen = %zd (will set dead)",
 			__func__, xprt, xprt->xp_fd, rlen);
 		return HAPROXY_RET_CODE__FAILURE;
 	}
@@ -902,7 +902,7 @@ static enum haproxy_ret_code handle_haproxy_header(SVCXPRT *xprt)
 			if (unlikely(s.len < sizeof(pa.ip4))) {
 				__warnx(TIRPC_DEBUG_FLAG_ERROR,
 					"%s: %p fd %d incorrect proxy header "
-					"ipv4 addr len = %z (will set dead)",
+					"ipv4 addr len = %zd (will set dead)",
 					__func__, xprt, xprt->xp_fd, s.len);
 				return HAPROXY_RET_CODE__FAILURE;
 			}
@@ -922,7 +922,7 @@ static enum haproxy_ret_code handle_haproxy_header(SVCXPRT *xprt)
 			if (unlikely(s.len < sizeof(pa.ip6))) {
 				__warnx(TIRPC_DEBUG_FLAG_ERROR,
 					"%s: %p fd %d incorrect proxy header "
-					"ipv6 addr len = %z (will set dead)",
+					"ipv6 addr len = %zd (will set dead)",
 					__func__, xprt, xprt->xp_fd, s.len);
 				return HAPROXY_RET_CODE__FAILURE;
 			}
@@ -1080,6 +1080,8 @@ again:
 				SVC_DESTROY(xprt);
 				return SVC_STAT(xprt);
 			case HAPROXY_RET_CODE__IGNORE_LOCAL:
+				/* clear off sx_fbtbc */
+	                        xd->sx_fbtbc = 0;
 				return SVC_STAT(xprt);
 			case HAPROXY_RET_CODE__NOT_HAPROXY:
 				break;
