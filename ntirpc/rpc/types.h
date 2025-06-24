@@ -48,6 +48,8 @@
 #include <sys/types.h>
 #include <inttypes.h>
 
+#include "haproxy.h"
+
 #if defined(_WIN32)
 
 #define __BEGIN_DECLS
@@ -257,6 +259,23 @@ struct netbuf {
 struct rpc_address {
 	struct netbuf nb;
 	struct sockaddr_storage ss;	/* address buffer */
+};
+
+/*
+ * The network id struct is used in combination with the client address
+ * to identify the unique client.
+ * Using proxy protocol, it's possible for clients from multiple networks to connect
+ * to the server, although they have the same IP address.
+ * This means that the client IP is not enough to identify the client and the network id
+ * is needed as well.
+ */
+struct network_id {
+	/* based on proxy protocol TLV header type values */
+	uint32_t source;
+	union {
+		uint64_t gcp_psc_connection_id;
+		/* TODO: add support for more common cloud providers */
+	};
 };
 
 /*
