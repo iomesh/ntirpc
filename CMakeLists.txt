@@ -2,7 +2,7 @@
 
 # Current version as of Fedora 16.  Not tested with earlier.
 
-cmake_minimum_required(VERSION 2.6.3)
+cmake_minimum_required(VERSION 2.6...4.0)
 
 set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_SOURCE_DIR}/cmake/modules/")
 
@@ -312,15 +312,13 @@ set( PKG_NAME "${CPACK_PACKAGE_NAME}-${CPACK_PACKAGE_VERSION}.tar.gz")
 endif (NOT TARGET dist)
 
 if (NOT TARGET rpm)
-add_custom_target( rpm DEPENDS dist)
-add_custom_command(TARGET rpm
+add_custom_target( rpm
                   COMMAND sh -c "rpmbuild -ta ${PKG_NAME}"
 		  VERBATIM
 		  DEPENDS dist)
 
 set(RPMDEST "--define '_srcrpmdir ${CMAKE_CURRENT_BINARY_DIR}'")
-add_custom_target( srpm DEPENDS dist)
-add_custom_command(TARGET srpm
+add_custom_target( srpm
                   COMMAND sh -c "rpmbuild ${RPMDEST} -ts ${PKG_NAME}"
 		  VERBATIM
 		  DEPENDS dist)
