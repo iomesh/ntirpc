@@ -674,6 +674,14 @@ svc_rqst_rearm_events_locked(SVCXPRT *xprt, uint16_t ev_flags)
 	struct svc_rqst_rec *sr_rec = rec->ev_p;
 	int code = EINVAL;
 
+	if (!xprt->recv_rearm_allowed
+	    && (ev_flags & SVC_XPRT_FLAG_ADDED_RECV)) {
+		__warnx(TIRPC_DEBUG_FLAG_SVC_RQST,
+				"Failed to rearm as fd %d is suspended",
+				rec->xprt.xp_fd);
+		return 0;
+	}
+
 	XPRT_AUTO_TRACEPOINT(xprt, rearm, TRACE_DEBUG,
 		"Rearm. ev_flags: {}", ev_flags);
 
@@ -1797,6 +1805,22 @@ svc_rqst_delete_evchan(uint32_t chan_id)
 
 	svc_rqst_release(sr_rec);
 	return (code);
+}
+
+void svc_rqst_qos_suspend_socket(struct svc_xprt *xprt)
+{
+	xprt->recv_rearm_allowed = false;
+}
+
+void svc_rqst_qos_resume_socket(struct svc_xprt *xprt)
+{
+	xprt->recv_rearm_allowed = true;
+	if (unlikely(svc_rqst_rearm_events(xprt, SVC_XPRT_FLAG_ADDED_RECV))) {
+		__warnx(TIRPC_DEBUG_FLAG_ERROR,
+				"%s: %p fd %d svc_rqst_rearm_events failed",
+				__func__, xprt, xprt->xp_fd);
+	}
+	SVC_STAT(xprt);
 }
 
 void

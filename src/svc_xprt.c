@@ -192,7 +192,7 @@ svc_xprt_lookup(int fd, svc_xprt_setup_t setup)
 			xprt->xp_dispatch.remote_addr_set_cb = NULL;
 			xprt->xp_unique_id =
 					atomic_inc_uint32_t(&xprt_unique_id);
-
+			xprt->recv_rearm_allowed = true;
 			/* Get ref for caller */
 			SVC_REF(xprt, SVC_REF_FLAG_NONE);
 
