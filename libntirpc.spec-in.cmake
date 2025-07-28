@@ -58,12 +58,14 @@ ln -s %{name}.so.%{version} %{buildroot}%{_libdir}/%{name}.so.4
 
 %files
 %{_libdir}/libntirpc.so.*
+%{_libdir}/libntirpcmonitoring.so.*
 %{!?_licensedir:%global license %%doc}
 %license COPYING
 %doc NEWS README
 
 %files devel
 %{_libdir}/libntirpc.so
+%{_libdir}/libntirpcmonitoring.so
 %dir %{_includedir}/ntirpc
 %{_includedir}/ntirpc/*
 %{_libdir}/pkgconfig/libntirpc.pc
