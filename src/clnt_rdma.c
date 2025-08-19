@@ -105,6 +105,8 @@ clnt_rdma_ncreatef(const SVCXPRT *xprt,		/* init but NOT connect()ed */
 	else {
 		rdma_xprt = (RDMAXPRT *)xprt;
 		rdma_xprt->shared = true;
+		/* Take ref for shared xprt */
+		SVC_REF(&rdma_xprt->sm_dr.xprt, SVC_REF_FLAG_NONE);
 	}
 
 	cm->cm_cx.cx_rec = &rdma_xprt->sm_dr;
