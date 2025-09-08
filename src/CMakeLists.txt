@@ -29,7 +29,6 @@ SET(ntirpc_common_SRCS
   getpeereid.c
   getrpcent.c
   mt_misc.c
-  metrics_libntirpc.c
   pmap_prot.c
   pmap_prot2.c
   pmap_rmt.c
@@ -66,6 +65,12 @@ SET(ntirpc_common_SRCS
   work_pool.c
 )
 
+if(USE_MONITORING)
+  SET(ntirpc_monitoring_SRCS
+    metrics_libntirpc.c
+  )
+endif(USE_MONITORING)
+
 if(USE_GSS)
   SET(ntirpc_gss_SRCS
     auth_gss.c authgss_hash.c
@@ -93,17 +98,20 @@ if(USE_LTTNG_NTIRPC)
   add_subdirectory(lttng)
 endif(USE_LTTNG_NTIRPC)
 
-# Monitoring stack.
-LIST(APPEND CMAKE_LIBRARY_PATH "${CMAKE_CURRENT_SOURCE_DIR}/monitoring/")
-LINK_DIRECTORIES("${CMAKE_CURRENT_SOURCE_DIR}/monitoring/")
-include_directories("${CMAKE_CURRENT_SOURCE_DIR}/monitoring/include")
-add_subdirectory("${CMAKE_CURRENT_SOURCE_DIR}/monitoring/")
+if (USE_MONITORING)
+  # Monitoring stack.
+  LIST(APPEND CMAKE_LIBRARY_PATH "${CMAKE_CURRENT_SOURCE_DIR}/monitoring/")
+  LINK_DIRECTORIES("${CMAKE_CURRENT_SOURCE_DIR}/monitoring/")
+  include_directories("${CMAKE_CURRENT_SOURCE_DIR}/monitoring/include")
+  add_subdirectory("${CMAKE_CURRENT_SOURCE_DIR}/monitoring/")
+endif (USE_MONITORING)
 
 # declares the library
 add_library(ntirpc SHARED
   ${ntirpc_common_SRCS}
   ${ntirpc_gss_SRCS}
   ${ntirpc_rdma_SRCS}
+  ${ntirpc_monitoring_SRCS}
 )
 
 # add required libraries--for Ganesha build, it's ok for them to
@@ -111,8 +119,11 @@ add_library(ntirpc SHARED
 target_link_libraries(ntirpc
   ${SYSTEM_LIBRARIES}
   ${CMAKE_THREAD_LIBS_INIT}
-  ntirpcmonitoring
 )
+
+if (USE_MONITORING)
+target_link_libraries(ntirpc ntirpcmonitoring)
+endif (USE_MONITORING)
 
 if(USE_LTTNG)
 target_link_libraries(ntirpc ntirpc_lttng)

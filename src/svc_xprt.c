@@ -39,7 +39,9 @@
 #include "rpc_com.h"
 #include "svc_internal.h"
 #include "svc_xprt.h"
+#ifdef USE_MONITORING
 #include "metrics_libntirpc.h"
+#endif /* USE_MONITORING */
 
 /**
  * @file svc_xprt.c
@@ -221,8 +223,10 @@ svc_xprt_lookup(int fd, svc_xprt_setup_t setup)
 					__func__, fd, xprt, xprt->xp_unique_id);
 			}
 			rwlock_unlock(&t->lock);
+#ifdef USE_MONITORING
 			metrics_libntirpc_update_tcp_connection_count(
 				atomic_fetch_uint32_t(&svc_xprt_fd.connections));
+#endif /* USE_MONITORING */
 			return (xprt);
 		}
 		/* raced, fallthru */
@@ -320,8 +324,10 @@ svc_xprt_clear(SVCXPRT *xprt)
 			opr_rbtree_remove(&t->t, &REC_XPRT(xprt)->fd_node);
 			rwlock_unlock(&t->lock);
 		}
+#ifdef USE_MONITORING
 		metrics_libntirpc_update_tcp_connection_count(
 			atomic_fetch_uint32_t(&svc_xprt_fd.connections));
+#endif /* USE_MONITORING */
 	}
 }
 

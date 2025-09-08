@@ -42,7 +42,9 @@
 #include <rpc/svc_auth.h>
 #include <rpc/gss_internal.h>
 #include <misc/portable.h>
+#ifdef USE_MONITORING
 #include "metrics_libntirpc.h"
+#endif /* USE_MONITORING */
 
 static struct svc_auth_ops svc_auth_gss_ops;
 
@@ -326,18 +328,17 @@ svcauth_gss_release_cred(void)
 	return (true);
 }
 
+#ifdef USE_MONITORING
 static void
 observe_gss_auth_op_latency(svc_auth_op_t op, rpc_gss_svc_t gss_svc,
 	const struct timespec *op_start)
 {
-#ifdef USE_MONITORING
 	struct timespec op_end, latency;
 
 	metrics_libntirpc_clock_gettime(&op_end);
 	timespecsub(&op_end, op_start, &latency);
 	metrics_libntirpc_observe_gss_svc_auth_op_latency(op, gss_svc,
 		&latency);
-#endif
 }
 
 static void
@@ -351,6 +352,7 @@ observe_gss_auth_step_latency(gss_svc_auth_step_t step, rpc_gss_svc_t gss_svc,
 	metrics_libntirpc_observe_gss_svc_auth_step_latency(step, gss_svc,
 		step_succeeded, &latency);
 }
+#endif /* USE_MONITORING */
 
 static bool
 svcauth_gss_accept_sec_context(struct svc_req *req,
@@ -495,9 +497,11 @@ svcauth_gss_validate(struct svc_req *req,
 	gss_buffer_desc rpcbuf, checksum;
 	OM_uint32 maj_stat, min_stat, qop_state;
 	u_char rpchdr[RPCHDR_LEN];
-	struct timespec start_time;
+#ifdef USE_MONITORING
+	struct timespec start_time = {};
 
 	metrics_libntirpc_clock_gettime(&start_time);
+#endif /* USE_MONITORING */
 	memset(rpchdr, 0, RPCHDR_LEN);
 
 	/* XXX - Reconstruct RPC header for signing (from xdr_callmsg). */
@@ -538,8 +542,10 @@ svcauth_gss_validate(struct svc_req *req,
 	}
 
 out:
+#ifdef USE_MONITORING
 	observe_gss_auth_step_latency(VALIDATE_AUTH_DATA, gd->sec.svc,
 		(maj_stat == GSS_S_COMPLETE), &start_time);
+#endif /* USE_MONITORING */
 	return (maj_stat);
 }
 
@@ -549,13 +555,17 @@ svcauth_gss_nextverf(struct svc_req *req, struct svc_rpc_gss_data *gd,
 {
 	gss_buffer_desc signbuf, checksum;
 	OM_uint32 maj_stat, min_stat;
-	struct timespec start_time;
+#ifdef USE_MONITORING
+	struct timespec start_time = {};
+#endif /* USE_MONITORING */
 	bool ret = true;
 
 	signbuf.value = &num;
 	signbuf.length = sizeof(num);
 
+#ifdef USE_MONITORING
 	metrics_libntirpc_clock_gettime(&start_time);
+#endif /* USE_MONITORING */
 	maj_stat =
 	    gss_get_mic(&min_stat, gd->ctx, gd->sec.qop, &signbuf, &checksum);
 
@@ -577,8 +587,10 @@ svcauth_gss_nextverf(struct svc_req *req, struct svc_rpc_gss_data *gd,
 	gss_release_buffer(&min_stat, &checksum);
 
 out:
+#ifdef USE_MONITORING
 	observe_gss_auth_step_latency(GET_NEXT_VERIFIER, gd->sec.svc, ret,
 		&start_time);
+#endif /* USE_MONITORING */
 	return (ret);
 }
 
@@ -644,11 +656,15 @@ static bool
 send_reply_to_client(struct svc_req *req)
 {
 	int call_stat;
+#ifdef USE_MONITORING
 	struct rpc_gss_cred *gc;
-	struct timespec start_time;
+	struct timespec start_time = {};
+#endif /* USE_MONITORING */
 	int res = true;
 
+#ifdef USE_MONITORING
 	metrics_libntirpc_clock_gettime(&start_time);
+#endif /* USE_MONITORING */
 	call_stat = svc_sendreply(req);
 	if (call_stat >= XPRT_DIED) {
 		__warnx(TIRPC_DEBUG_FLAG_ERROR,
@@ -656,9 +672,11 @@ send_reply_to_client(struct svc_req *req)
 		res = false;
 	}
 
+#ifdef USE_MONITORING
 	gc = (struct rpc_gss_cred *)req->rq_msg.rq_cred_body;
 	observe_gss_auth_step_latency(SEND_CLIENT_REPLY, gc->gc_svc, res,
 		&start_time);
+#endif /* USE_MONITORING */
 	return res;
 }
 
@@ -672,7 +690,9 @@ _svcauth_gss(struct svc_req *req, bool *no_dispatch)
 	struct rpc_gss_init_res gr;
 	int call_stat;
 	OM_uint32 min_stat;
+#ifdef USE_MONITORING
 	struct timespec start_time;
+#endif /* USE_MONITORING */
 	bool res;
 
 	enum auth_stat rc = AUTH_OK;
@@ -796,10 +816,14 @@ _svcauth_gss(struct svc_req *req, bool *no_dispatch)
 			goto gd_free;
 		}
 
+#ifdef USE_MONITORING
 		metrics_libntirpc_clock_gettime(&start_time);
+#endif /* USE_MONITORING */
 		res = svcauth_gss_accept_sec_context(req, gd, &gr);
+#ifdef USE_MONITORING
 		observe_gss_auth_step_latency(ACCEPT_SECURITY_CONTEXT, gc->gc_svc,
 			res, &start_time);
+#endif /* USE_MONITORING */
 
 		if (!res) {
 			rc = AUTH_REJECTEDCRED;
@@ -964,11 +988,14 @@ svcauth_gss_destroy(SVCAUTH *auth)
 {
 	struct svc_rpc_gss_data *gd;
 	OM_uint32 min_stat;
-	struct timespec start_time;
+#ifdef USE_MONITORING
+	struct timespec start_time = {};
 	rpc_gss_svc_t gss_svc;
 	bool gd_established;
+#endif /* USE_MONITORING */
 
 	gd = SVCAUTH_PRIVATE(auth);
+#ifdef USE_MONITORING
 	gd_established = gd->established;
 
 	if (gd_established) {
@@ -976,6 +1003,7 @@ svcauth_gss_destroy(SVCAUTH *auth)
 		metrics_libntirpc_clock_gettime(&start_time);
 		gss_svc = gd->sec.svc;
 	}
+#endif /* USE_MONITORING */
 
 	gss_delete_sec_context(&min_stat, &gd->ctx, GSS_C_NO_BUFFER);
 	gss_release_buffer(&min_stat, &gd->cname);
@@ -994,9 +1022,11 @@ svcauth_gss_destroy(SVCAUTH *auth)
 	mem_free(gd, sizeof(*gd));
 	mem_free(auth, sizeof(*auth));
 
+#ifdef USE_MONITORING
 	if (gd_established) {
 		observe_gss_auth_op_latency(SVC_AUTH_OP_DESTROY, gss_svc, &start_time);
 	}
+#endif /* USE_MONITORING */
 	return (true);
 }
 
@@ -1008,9 +1038,11 @@ svcauth_gss_wrap(struct svc_req *req, XDR *xdrs)
 	struct rpc_gss_cred *gc = (struct rpc_gss_cred *)
 					req->rq_msg.rq_cred_body;
 	bool result;
-	struct timespec start_time;
+#ifdef USE_MONITORING
+	struct timespec start_time = {};
 
 	metrics_libntirpc_clock_gettime(&start_time);
+#endif /* USE_MONITORING */
 
 	__warnx(TIRPC_DEBUG_FLAG_RPCSEC_GSS, "%s() %d %s", __func__,
 		!gd->established ? 0 : gc->gc_svc,
@@ -1031,7 +1063,9 @@ svcauth_gss_wrap(struct svc_req *req, XDR *xdrs)
 	mutex_unlock(&gd->lock);
 
 out:
+#ifdef USE_MONITORING
 	observe_gss_auth_op_latency(SVC_AUTH_OP_WRAP, gc->gc_svc, &start_time);
+#endif /* USE_MONITORING */
 	return (result);
 }
 
@@ -1040,12 +1074,14 @@ svcauth_gss_unwrap(struct svc_req *req)
 {
 	struct svc_rpc_gss_data *gd = SVCAUTH_PRIVATE(req->rq_auth);
 	u_int gc_seq = (u_int) (uintptr_t) req->rq_ap1;
+	bool result;
+#ifdef USE_MONITORING
 	const struct rpc_gss_cred *const gc = (struct rpc_gss_cred *)
 		req->rq_msg.rq_cred_body;
-	bool result;
-	struct timespec start_time;
+	struct timespec start_time = {};
 
 	metrics_libntirpc_clock_gettime(&start_time);
+#endif /* USE_MONITORING */
 
 	if (!gd->established || gd->sec.svc == RPCSEC_GSS_SVC_NONE) {
 		result = (svc_auth_none.svc_ah_ops->svc_ah_unwrap(req));
@@ -1059,7 +1095,9 @@ svcauth_gss_unwrap(struct svc_req *req)
 	mutex_unlock(&gd->lock);
 
 out:
+#ifdef USE_MONITORING
 	observe_gss_auth_op_latency(SVC_AUTH_OP_UNWRAP, gc->gc_svc, &start_time);
+#endif /* USE_MONITORING */
 	return (result);
 }
 
@@ -1075,12 +1113,14 @@ svcauth_gss_checksum(struct svc_req *req)
 {
 	struct svc_rpc_gss_data *gd = SVCAUTH_PRIVATE(req->rq_auth);
 	u_int gc_seq = (u_int) (uintptr_t) req->rq_ap1;
+	bool result;
+#ifdef USE_MONITORING
 	const struct rpc_gss_cred *const gc = (struct rpc_gss_cred *)
 		req->rq_msg.rq_cred_body;
-	bool result;
-	struct timespec start_time;
+	struct timespec start_time = {};
 
 	metrics_libntirpc_clock_gettime(&start_time);
+#endif /* USE_MONITORING */
 
 	if (!gd->established || gd->sec.svc == RPCSEC_GSS_SVC_NONE) {
 		result = (svc_auth_none.svc_ah_ops->svc_ah_checksum(req));
@@ -1094,7 +1134,9 @@ svcauth_gss_checksum(struct svc_req *req)
 	mutex_unlock(&gd->lock);
 
 out:
+#ifdef USE_MONITORING
 	observe_gss_auth_op_latency(SVC_AUTH_OP_CHECKSUM, gc->gc_svc, &start_time);
+#endif /* USE_MONITORING */
 	return (result);
 }
 

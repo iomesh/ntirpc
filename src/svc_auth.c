@@ -41,7 +41,9 @@
 #include <rpc/rpc.h>
 #include <rpc/svc_auth.h>
 #include <stdlib.h>
+#ifdef USE_MONITORING
 #include "metrics_libntirpc.h"
+#endif /* USE_MONITORING */
 
 /*
  * svcauthsw is the bdevsw of server side authentication.
@@ -89,9 +91,11 @@ svc_auth_authenticate(struct svc_req *req, bool *no_dispatch)
 	enum auth_stat rslt;
 	int cred_flavor;
 	extern mutex_t authsvc_lock;
+#ifdef USE_MONITORING
 	struct timespec start, end, latency;
 
 	metrics_libntirpc_clock_gettime(&start);
+#endif /* USE_MONITORING */
 
 	/* VARIABLES PROTECTED BY authsvc_lock: asp, Auths */
 	req->rq_msg.RPCM_ack.ar_verf = _null_auth;
@@ -136,10 +140,12 @@ svc_auth_authenticate(struct svc_req *req, bool *no_dispatch)
 	return (AUTH_REJECTEDCRED);
 
 out:
+#ifdef USE_MONITORING
 	metrics_libntirpc_clock_gettime(&end);
 	timespecsub(&end, &start, &latency);
 	metrics_libntirpc_observe_svc_auth_request_latency(cred_flavor,
 		rslt, &latency);
+#endif /* USE_MONITORING */
 
 	return (rslt);
 }

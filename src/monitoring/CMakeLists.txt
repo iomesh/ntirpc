@@ -17,3 +17,4 @@ set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -pedantic-errors -Werror -Wall -Wextra")
 install(TARGETS ntirpcmonitoring DESTINATION ${LIB_INSTALL_DIR})
 
 ########### install files ###############
+install(FILES  include/monitoring.h DESTINATION include/ntirpc)

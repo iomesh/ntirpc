@@ -295,6 +295,18 @@ configure_file(
   @ONLY
 )
 
+# Tweak the "%bcond_<with|without> in the specfile for every
+# optional feature. Take care on the logic of this syntax
+# %bcond_with means you add a "--with" option, default is "without this feature"
+# %bcond_without adds a"--without" so the feature is enabled by default
+# This has to be coherent with chosen FSALs
+
+if(USE_MONITORING)
+  set(BCOND_MONITORING "%bcond_without")
+else(USE_MONITORING)
+  set(BCOND_MONITORING "%bcond_with")
+endif(USE_MONITORING)
+
 configure_file(
   "${NTIRPC_BASE_DIR}/libntirpc.spec-in.cmake"
   "${PROJECT_SOURCE_DIR}/libntirpc.spec"

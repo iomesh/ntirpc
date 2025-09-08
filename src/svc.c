@@ -77,7 +77,9 @@
 #endif
 #include "svc_ioq.h"
 
+#ifdef USE_MONITORING
 #include "metrics_libntirpc.h"
+#endif /* USE_MONITORING */
 
 #define SVC_VERSQUIET 0x0001	/* keep quiet about vers mismatch */
 #define version_keepquiet(xp) ((u_long)(xp)->xp_p3 & SVC_VERSQUIET)
@@ -132,8 +134,10 @@ svc_init(svc_init_params *params)
 	struct work_pool_params work_pool_params = {0,};
 	uint32_t channels = params->channels ? params->channels : 8;
 
+#ifdef USE_MONITORING
 	/* Initialize metrics for libntirpc */
 	metrics_libntirpc_init();
+#endif /* USE_MONITORING */
 
 	mutex_lock(&__svc_params->mtx);
 	if (__svc_params->initialized) {
