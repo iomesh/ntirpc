@@ -100,9 +100,15 @@ clnt_rdma_ncreatef(const SVCXPRT *xprt,		/* init but NOT connect()ed */
 	XDR xdrs[1];		/* temp XDR stream */
 
 	RDMAXPRT *rdma_xprt = NULL;
-	if (create)
+	if (create) {
 		rdma_xprt = rpc_rdma_allocate(((RDMAXPRT *)xprt)->xa);
-	else {
+		if (!rdma_xprt) {
+			__warnx(TIRPC_DEBUG_FLAG_ERROR,
+				"%s: rdma allocate failed", __func__);
+			cl->cl_error.re_status = RPC_SYSTEMERROR;
+			return cl;
+		}
+	} else {
 		rdma_xprt = (RDMAXPRT *)xprt;
 		rdma_xprt->shared = true;
 		/* Take ref for shared xprt */
@@ -113,6 +119,12 @@ clnt_rdma_ncreatef(const SVCXPRT *xprt,		/* init but NOT connect()ed */
 	cl->cl_ops = clnt_rdma_ops();
 	cl->rdma_clnt = true;
 
+	/* This is used when we want to create seperate
+	 * connection for callback channel.
+	 * xprt we are passing is existing connection,
+	 * so we need separet flag to indicate we want to
+	 * create new connection or existing one as callback channel.
+	 * For NFSv4.1 its always false, since we want to use same connection. */
 	if (create) {
 		/* Copy remote ip */
 		svc_rdma_ops(&rdma_xprt->sm_dr.xprt);
@@ -124,6 +136,10 @@ clnt_rdma_ncreatef(const SVCXPRT *xprt,		/* init but NOT connect()ed */
 		__warnx(TIRPC_DEBUG_FLAG_EVENT, "%s: create rdma clnt ip %s port %d",
 			__func__, rdma_xprt->sm_dr.xprt.xp_ip, rdma_xprt->sm_dr.xprt.xp_port);
 
+		/* RDMAX_CLIENT indicate is client connection from
+		 * server to client if we are creating new connection
+		 * for server listen connection we use xa->backlog
+		 * for client to server connection we use RDMAX_SERVER_CHILD */
 		rdma_xprt->server = RDMAX_CLIENT;
 
 		if (!rdma_xprt || rdma_xprt->state != RDMAXS_INITIAL) {
@@ -139,8 +155,17 @@ clnt_rdma_ncreatef(const SVCXPRT *xprt,		/* init but NOT connect()ed */
 			cl->cl_error.re_status = RPC_UNKNOWNADDR;
 			return (cl);
 		}
-		rpc_rdma_connect(rdma_xprt);
-		rpc_rdma_connect_finalize(rdma_xprt);
+
+		if (rpc_rdma_connect(rdma_xprt)) {
+			__warnx(TIRPC_DEBUG_FLAG_ERROR,
+				"%s: rdma connect failed", __func__);
+			return (cl);
+		}
+		if (rpc_rdma_connect_finalize(rdma_xprt)) {
+			__warnx(TIRPC_DEBUG_FLAG_ERROR,
+				"%s: rdma connect finalize failed", __func__);
+			return (cl);
+		}
 
 		struct rpc_dplx_rec *rec = REC_XPRT(xprt);
 		rdma_xprt->sm_dr.recvsz = rec->recvsz;
