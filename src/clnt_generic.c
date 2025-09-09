@@ -447,11 +447,43 @@ clnt_req_xid_cmpf(const struct opr_rbtree_node *lhs,
 	return (1);
 }
 
+/*
+ * Helper function to insert RDMA client request into call_expires
+ */
+static void
+rdma_clnt_req_expire_insert(struct clnt_req *cc)
+{
+	struct cx_data *cx = CX_DATA(cc->cc_clnt);
+	struct rpc_dplx_rec *rec = cx->cx_rec;
+	struct opr_rbtree_node *nv;
+	struct timespec ts;
+
+	/* Calculate expiration time */
+	(void)clock_gettime(CLOCK_MONOTONIC_FAST, &ts);
+	timespecadd(&ts, &cc->cc_timeout, &ts);
+	cc->cc_expire_ms = timespec_ms(&ts);
+
+	rpc_dplx_rli(rec);
+	cc->cc_flags = CLNT_REQ_FLAG_EXPIRING;
+ repeat:
+	nv = opr_rbtree_insert(&rec->rdma_call_expires, &cc->cc_rqst);
+	if (nv) {
+		/* add this slightly later */
+		cc->cc_expire_ms++;
+		goto repeat;
+	}
+	rpc_dplx_rui(rec);
+}
+
 enum clnt_stat
 clnt_req_callback(struct clnt_req *cc)
 {
-	if (!cc->cc_clnt->rdma_clnt)
+	/* Add to appropriate call_expires list based on transport type */
+	if (cc->cc_clnt->rdma_clnt) {
+		rdma_clnt_req_expire_insert(cc);
+	} else {
 		svc_rqst_expire_insert(cc);
+	}
 
 	return CLNT_CALL_ONCE(cc);
 }
@@ -493,6 +525,20 @@ clnt_req_refresh(struct clnt_req *cc)
 	return (RPC_SUCCESS);
 }
 
+/*
+ * Helper function to remove RDMA client request from call_expires
+ */
+void
+rdma_clnt_req_expire_remove(struct clnt_req *cc)
+{
+	struct cx_data *cx = CX_DATA(cc->cc_clnt);
+	struct rpc_dplx_rec *rec = cx->cx_rec;
+
+	rpc_dplx_rli(rec);
+	opr_rbtree_remove(&rec->rdma_call_expires, &cc->cc_rqst);
+	rpc_dplx_rui(rec);
+}
+
 void
 clnt_req_reset(struct clnt_req *cc)
 {
@@ -506,7 +552,12 @@ clnt_req_reset(struct clnt_req *cc)
 					   CLNT_REQ_FLAG_ACKSYNC |
 					   CLNT_REQ_FLAG_EXPIRING)
 	    & CLNT_REQ_FLAG_EXPIRING) {
-		svc_rqst_expire_remove(cc);
+		/* Remove from appropriate call_expires list based on transport type */
+		if (cc->cc_clnt->rdma_clnt) {
+			rdma_clnt_req_expire_remove(cc);
+		} else {
+			svc_rqst_expire_remove(cc);
+		}
 		cc->cc_expire_ms = 0;	/* atomic barrier(s) */
 	}
 }
@@ -526,12 +577,6 @@ clnt_req_setup(struct clnt_req *cc, struct timespec timeout)
 	cc->cc_refreshes = 2;
 	cc->cc_timeout = timeout;
 
-	/* We are not adding to call_replies list for
-	 * rdma */
-	if (cc->cc_clnt->rdma_clnt) {
-		cc->cc_xid = ++(rec->call_xid);
-		goto out;
-	}
 
 	if (timeout.tv_nsec < 0 || timeout.tv_nsec > 999999999
 	 || timeout.tv_sec < 0) {
@@ -561,7 +606,6 @@ clnt_req_setup(struct clnt_req *cc, struct timespec timeout)
 		return (RPC_TLIERROR);
 	}
 
-out:
 	CLNT_REF(clnt, CLNT_REF_FLAG_NONE);
 	return (RPC_SUCCESS);
 }
@@ -594,7 +638,7 @@ clnt_req_process_reply(SVCXPRT *xprt, struct svc_req *req)
 	if (atomic_postclear_uint16_t_bits(&cc->cc_flags,
 					   CLNT_REQ_FLAG_EXPIRING)
 	    & CLNT_REQ_FLAG_EXPIRING) {
-		svc_rqst_expire_remove(cc);
+		rdma_clnt_req_expire_remove(cc);
 		cc->cc_expire_ms = 0;	/* atomic barrier(s) */
 	}
 
@@ -712,8 +756,7 @@ clnt_req_release(struct clnt_req *cc)
 		return (refs);
 	}
 
-	if (!cc->cc_clnt->rdma_clnt)
-		clnt_req_reset(cc);
+	clnt_req_reset(cc);
 	clnt_req_fini(cc);
 	CLNT_RELEASE(cc->cc_clnt, CLNT_RELEASE_FLAG_NONE);
 

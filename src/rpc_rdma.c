@@ -75,6 +75,7 @@
 #include "misc/abstract_atomic.h"
 #include "rpc_rdma.h"
 #include "svc_internal.h"
+#include "clnt_internal.h"
 
 #ifdef HAVE_VALGRIND_MEMCHECK_H
 #  include <valgrind/memcheck.h>
@@ -1051,6 +1052,56 @@ rpc_rdma_cq_event_handler(RDMAXPRT *rdma_xprt, int expected_poll_count)
 }
 
 /**
+ * rpc_rdma_process_transport_expires: process expired client requests for a specific RDMA transport
+ * Similar to the call_expires processing in svc_rqst_epoll_loop
+ *
+ * @param[IN] rdma_xprt RDMA transport to process
+ * @param[IN] expire_ms current time in milliseconds
+ * @param[INOUT] timeout_ms pointer to timeout value to be updated
+ */
+static void
+rpc_rdma_process_transport_expires(RDMAXPRT *rdma_xprt, int expire_ms, int *timeout_ms)
+{
+	struct clnt_req *cc;
+	struct opr_rbtree_node *n_node;
+	struct rpc_dplx_rec *rec;
+	int min_timeout = *timeout_ms;
+
+	if (!rdma_xprt)
+		return;
+
+	rec = &rdma_xprt->sm_dr;
+
+	/* Process rdma_call_expires for this transport - similar to svc_rqst_epoll_loop */
+	rpc_dplx_rli(rec);
+	while ((n_node = opr_rbtree_first(&rec->rdma_call_expires))) {
+		cc = opr_containerof(n_node, struct clnt_req, cc_rqst);
+
+		if (cc->cc_expire_ms > expire_ms) {
+			int transport_timeout = cc->cc_expire_ms - expire_ms;
+			if (transport_timeout < min_timeout) {
+				min_timeout = transport_timeout;
+			}
+			break;
+		}
+
+		/* order dependent */
+		atomic_clear_uint16_t_bits(&cc->cc_flags,
+					   CLNT_REQ_FLAG_EXPIRING);
+		opr_rbtree_remove(&rec->rdma_call_expires, &cc->cc_rqst);
+		cc->cc_expire_ms = 0;	/* atomic barrier(s) */
+
+		atomic_inc_uint32_t(&cc->cc_refcnt);
+		cc->cc_wpe.fun = svc_rqst_expire_task;
+		cc->cc_wpe.arg = NULL;
+		work_pool_submit(&svc_work_pool, &cc->cc_wpe);
+	}
+	rpc_dplx_rui(rec);
+
+	*timeout_ms = min_timeout;
+}
+
+/**
  * rpc_rdma_cq_thread: thread function which waits for new completion events
  * and gives them to handler (then ack the event)
  *
@@ -1060,6 +1111,9 @@ rpc_rdma_cq_thread(void *arg)
 {
 	RDMAXPRT *rdma_xprt;
 	struct epoll_event epoll_events[EPOLL_EVENTS];
+	struct timespec ts;
+	int timeout_ms;
+	int expire_ms;
 	int i;
 	int n;
 	int rc;
@@ -1076,8 +1130,15 @@ rpc_rdma_cq_thread(void *arg)
 	rcu_register_thread();
 
 	while (rpc_rdma_state.run_count > 0) {
+		timeout_ms = EPOLL_WAIT_MS;
+
+		/* Process call_expires for RDMA transports */
+		/* coarse nsec, not system time */
+		(void)clock_gettime(CLOCK_MONOTONIC_FAST, &ts);
+		expire_ms = timespec_ms(&ts);
+
 		n = epoll_wait(epollfd,
-				epoll_events, EPOLL_EVENTS, EPOLL_WAIT_MS);
+				epoll_events, EPOLL_EVENTS, timeout_ms);
 		if (n == 0)
 			continue;
 
@@ -1101,6 +1162,9 @@ rpc_rdma_cq_thread(void *arg)
 					__func__);
 				continue;
 			}
+
+			/* Process call_expires for this RDMA transport */
+			rpc_rdma_process_transport_expires(rdma_xprt, expire_ms, &timeout_ms);
 
 			if (epoll_events[i].events == EPOLLERR
 			 || epoll_events[i].events == EPOLLHUP) {
