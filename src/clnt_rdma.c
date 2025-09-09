@@ -232,13 +232,33 @@ clnt_rdma_call(struct clnt_req *cc)
 		xdr_rdma_ioq_uv_fetch(&rdma_xprt->sm_dr.ioq, &rdma_xprt->cbqh,
 				 "call context", 1, IOQ_FLAG_NONE);
 	struct rpc_rdma_cbc *cbc = (struct rpc_rdma_cbc *)(_IOQ(have));
+
+        cbc->recvq.xdrs[0].x_lib[1] =
+        cbc->sendq.xdrs[0].x_lib[1] =
+        cbc->dataq.xdrs[0].x_lib[1] =
+        cbc->freeq.xdrs[0].x_lib[1] = rdma_xprt;
+
+        pthread_mutex_lock(&rdma_xprt->cbclist.qmutex);
+
+        cbc->call_inline = 1;
+        cbc->data_chunk_uv = NULL;
+        cbc->refcnt = 1; // Sentinel ref
+	SVC_REF(&rdma_xprt->sm_dr.xprt, SVC_REF_FLAG_NONE); // for cbc ref
+        cbc->cbc_flags = CBC_FLAG_RELEASE;
+        cbc->read_waits = 0;
+        cbc->write_waits = 0;
+        cbc->active = false;
+        cbc->non_registered_buf = NULL;
+        cbc->non_registered_buf_len = 0;
+
+        TAILQ_INSERT_TAIL(&rdma_xprt->cbclist.qh, &cbc->cbc_list, q);
+        rdma_xprt->cbclist.qcount++;
+        pthread_mutex_unlock(&rdma_xprt->cbclist.qmutex);
+
 	XDR *xdrs;
 	u_int32_t *uint32p;
 
 	cc->cc_timeout.tv_sec = cc->cc_timeout.tv_nsec = 0;
-
-	cbc->recvq.xdrs[0].x_lib[1] =
-	cbc->sendq.xdrs[0].x_lib[1] = rdma_xprt;
 
 	/* Use hdr buffer since callbacks don't contain data */
 	(void) xdr_rdma_ioq_uv_fetch(&cbc->sendq, &rdma_xprt->outbufs_hdr.uvqh,
@@ -263,16 +283,19 @@ clnt_rdma_call(struct clnt_req *cc)
 		__warnx(TIRPC_DEBUG_FLAG_CLNT_RDMA,
 			"%s: %p@%p failed",
 			__func__, cl, cx->cx_rec);
-		cbc_release_it(cbc);;
+		cbc_release_it(cbc);
 		return (RPC_CANTENCODEARGS);
 	}
 	mutex_unlock(&cl->cl_lock);
 
 	/* send request and recv response */
 	if (!xdr_rdma_clnt_flushout(cbc)) {
+		cbc_release_it(cbc);
 		cl->cl_error.re_errno = errno;
 		return (RPC_CANTSEND);
 	}
+
+	cbc_release_it(cbc);
 
 	return (RPC_SUCCESS);
 }

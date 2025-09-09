@@ -2005,9 +2005,6 @@ xdr_rdma_svc_reply(struct rpc_rdma_cbc *cbc, u_int32_t xid,
 bool
 xdr_rdma_clnt_flushout(struct rpc_rdma_cbc *cbc)
 {
-/* FIXME: decide how many buffers we use in argument!!!!!! */
-#define num_chunks 1
-
 	RDMAXPRT *rdma_xprt = x_rdma_xprt(cbc->sendq.xdrs);
 	struct rpc_msg *msg;
 	struct rdma_msg *rmsg;

@@ -237,7 +237,8 @@ svc_rdma_decode(struct svc_req *req)
 
 	if (req->rq_msg.rm_direction == REPLY) {
 		/* reply header (xprt OK) */
-		return clnt_req_process_reply(req->rq_xprt, req);
+		clnt_req_process_reply(req->rq_xprt, req);
+		return XPRT_IDLE;
 	}
 
 	__warnx(TIRPC_DEBUG_FLAG_WARN,
