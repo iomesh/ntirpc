@@ -638,7 +638,11 @@ clnt_req_process_reply(SVCXPRT *xprt, struct svc_req *req)
 	if (atomic_postclear_uint16_t_bits(&cc->cc_flags,
 					   CLNT_REQ_FLAG_EXPIRING)
 	    & CLNT_REQ_FLAG_EXPIRING) {
-		rdma_clnt_req_expire_remove(cc);
+		if (cc->cc_clnt->rdma_clnt) {
+			rdma_clnt_req_expire_remove(cc);
+		} else {
+			svc_rqst_expire_remove(cc);
+		}
 		cc->cc_expire_ms = 0;	/* atomic barrier(s) */
 	}
 
