@@ -461,6 +461,7 @@ xdr_rdma_post_recv_n(RDMAXPRT *rdma_xprt, struct rpc_rdma_cbc *cbc, int sge)
 	return 0;
 }
 
+/* Post synchronous RDMA receive operation */
 static int
 xdr_rdma_post_recv_sync(RDMAXPRT *rdma_xprt, struct rpc_rdma_cbc *cbc, int sge)
 {
@@ -683,6 +684,7 @@ xdr_rdma_wait_cb_done_locked(struct rpc_rdma_cbc *cbc)
 
 }
 
+/* Post synchronous RDMA send operation with callback */
 static inline int
 xdr_rdma_sync_send_cb(RDMAXPRT *rdma_xprt, struct rpc_rdma_cbc *cbc, int sge)
 {

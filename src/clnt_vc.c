@@ -127,6 +127,7 @@ clnt_vc_data_zalloc(void)
  */
 
 
+/* Create new RDMA client with specified connection parameters */
 CLIENT *
 clnt_rdma_create(int fd, char *host, int port, int recv_sz, int send_sz,
     int page_sz, const rpcprog_t prog, const rpcvers_t vers,

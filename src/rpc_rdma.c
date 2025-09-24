@@ -1422,6 +1422,7 @@ rpc_rdma_cm_thread(void *nullarg)
 	pthread_exit(NULL);
 }
 
+/* Handle RDMA connection manager events synchronously */
 int
 rpc_rdma_cm_event_handler_inline(RDMAXPRT *rdma_xprt, int expected_event)
 {
@@ -1904,6 +1905,7 @@ rpc_rdma_create_qp(RDMAXPRT *rdma_xprt, struct rdma_cm_id *cm_id)
 	return 0;
 }
 
+/* Initialize RDMA client completion channel and queue */
 int
 rpc_rdma_setup_stuff_client(RDMAXPRT *rdma_xprt)
 {
@@ -2548,6 +2550,7 @@ rpc_rdma_connect_finalize(RDMAXPRT *rdma_xprt)
 	return rc;
 }
 
+/* Prepare RDMA connection by creating event channel and CM ID */
 int
 rpc_rdma_connect_prepare(RDMAXPRT *rdma_xprt)
 {
