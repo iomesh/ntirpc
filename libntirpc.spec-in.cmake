@@ -1,6 +1,22 @@
 
 %undefine		_hardened_build
 
+# Conditionally enable some options, disable others.
+#
+# 1. rpmbuild accepts these options (gpfs as example):
+#    --with gpfs
+#    --without gpfs
+
+%define on_off_switch() %%{?with_%1:ON}%%{!?with_%1:OFF}
+
+# A few explanation about % bcond_with and % bcond_without
+# /!\ be careful: this syntax can be quite messy
+# % bcond_with means you add a "--with" option, default = without this feature
+# % bcond_without adds a"--without" so the feature is enabled by default
+
+@BCOND_MONITORING@ monitoring
+%global use_monitoring %{on_off_switch monitoring}
+
 Name:		libntirpc
 Version:	@NTIRPC_VERSION@
 Release:	1%{?dev:%{dev}}%{?dist}
@@ -41,7 +57,7 @@ Development headers and auxiliary files for developing with %{name}.
 %setup -q -n ntirpc-%{version}
 
 %build
-%cmake . -DOVERRIDE_INSTALL_PREFIX=/usr -DTIRPC_EPOLL=1 -DUSE_GSS=ON "-GUnix Makefiles"
+%cmake . -DOVERRIDE_INSTALL_PREFIX=/usr -DTIRPC_EPOLL=1 -DUSE_GSS=ON -DUSE_MONITORING=%{use_monitoring} "-GUnix Makefiles"
 
 %cmake_build %{?_smp_mflags}
 
@@ -58,12 +74,18 @@ ln -s %{name}.so.%{version} %{buildroot}%{_libdir}/%{name}.so.4
 
 %files
 %{_libdir}/libntirpc.so.*
+%if %{with monitoring}
+%{_libdir}/libntirpcmonitoring.so.*
+%endif
 %{!?_licensedir:%global license %%doc}
 %license COPYING
 %doc NEWS README
 
 %files devel
 %{_libdir}/libntirpc.so
+%if %{with monitoring}
+%{_libdir}/libntirpcmonitoring.so
+%endif
 %dir %{_includedir}/ntirpc
 %{_includedir}/ntirpc/*
 %{_libdir}/pkgconfig/libntirpc.pc

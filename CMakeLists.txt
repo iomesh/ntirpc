@@ -2,7 +2,7 @@
 
 # Current version as of Fedora 16.  Not tested with earlier.
 
-cmake_minimum_required(VERSION 2.6...4.0)
+cmake_minimum_required(VERSION 3.5.0)
 
 set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_SOURCE_DIR}/cmake/modules/")
 
@@ -13,9 +13,9 @@ include(${CMAKE_SOURCE_DIR}/cmake/maintainer_mode.cmake)
 project(NTIRPC C CXX)
 
 # version numbers
-set(NTIRPC_MAJOR_VERSION 6)
+set(NTIRPC_MAJOR_VERSION 7)
 # This is .0 for a release, .N for a stable branch, blank for development
-set(NTIRPC_MINOR_VERSION .3)
+set(NTIRPC_MINOR_VERSION .2)
 # -something for dev releases
 set(NTIRPC_VERSION_EXTRA )
 set(VERSION_COMMENT
@@ -294,6 +294,18 @@ configure_file(
   "${PROJECT_BINARY_DIR}/libntirpc.pc"
   @ONLY
 )
+
+# Tweak the "%bcond_<with|without> in the specfile for every
+# optional feature. Take care on the logic of this syntax
+# %bcond_with means you add a "--with" option, default is "without this feature"
+# %bcond_without adds a"--without" so the feature is enabled by default
+# This has to be coherent with chosen FSALs
+
+if(USE_MONITORING)
+  set(BCOND_MONITORING "%bcond_without")
+else(USE_MONITORING)
+  set(BCOND_MONITORING "%bcond_with")
+endif(USE_MONITORING)
 
 configure_file(
   "${NTIRPC_BASE_DIR}/libntirpc.spec-in.cmake"

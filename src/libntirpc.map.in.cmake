@@ -70,6 +70,8 @@ NTIRPC_${NTIRPC_VERSION_BASE} {
     clnt_vc_get_client_xprt;
     clnt_vc_ncreatef;
     clnt_vc_ncreate_svc;
+    clnt_rdma_create;
+    clnt_rdma_ncreatef;
 
     # e*
     endnetconfig;
@@ -138,6 +140,8 @@ NTIRPC_${NTIRPC_VERSION_BASE} {
     svc_raw_ncreate;
     svc_reg;
     svc_resume;
+    svc_rqst_qos_suspend_socket;
+    svc_rqst_qos_resume_socket;
     svc_rqst_new_evchan;
     svc_rqst_evchan_reg;
     svc_rqst_evchan_unreg;

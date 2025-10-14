@@ -315,10 +315,13 @@ struct svc_xprt {
 	int xp_ifindex;		/* interface index */
 	int xp_si_type;		/* si type */
 	int xp_type;		/* xprt type */
+	char *xp_ip;		/* remote ip */
+	int xp_port;		/* remote port */
 
 	int32_t xp_refcnt;	/* handle reference count */
 	uint16_t xp_flags;	/* flags */
 	uint32_t xp_unique_id;
+	bool recv_rearm_allowed;
 
 	union {
 		struct in_pktinfo in;
@@ -411,6 +414,10 @@ struct svc_req {
 #define svc_getrpclocal(x) (&(x)->xp_local.ss)
 
 extern void svc_resume(struct svc_req *req);
+
+extern void svc_rqst_qos_suspend_socket(struct svc_xprt *xprt);
+
+extern void svc_rqst_qos_resume_socket(struct svc_xprt *xprt);
 
 /*
  * Ganesha.  Get connected transport type.
