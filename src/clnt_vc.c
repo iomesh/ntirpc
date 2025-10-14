@@ -74,7 +74,6 @@
 #include "clnt_internal.h"
 #include "svc_internal.h"
 #include "rpc_rdma.h"
-#include "gsh_rpc.h"
 
 static enum xprt_stat clnt_vc_process(struct svc_req *req);
 static struct clnt_ops *clnt_vc_ops(void);
@@ -146,7 +145,7 @@ clnt_rdma_create(int fd, char *host, int port, int recv_sz, int send_sz,
 		.destroy_on_disconnect = true,
 		.use_srq = false,
 	};
-	struct rpc_rdma_attr *use_xa = gsh_malloc(sizeof(struct rpc_rdma_attr));
+	struct rpc_rdma_attr *use_xa = mem_alloc(sizeof(struct rpc_rdma_attr));
 	memcpy(use_xa, &tmp_xa, sizeof(struct rpc_rdma_attr));
 	SVCXPRT *xprt = svc_fd_ncreatef(fd, send_sz, recv_sz, flags);
 	if (!xprt) {

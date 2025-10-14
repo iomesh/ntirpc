@@ -59,7 +59,6 @@
 #include "rpc_rdma.h"
 #include <rpc/svc_rqst.h>
 #include <rpc/svc_auth.h>
-#include "gsh_rpc.h"
 
 
 /*
@@ -95,7 +94,7 @@ svc_rdma_rendezvous(SVCXPRT *xprt)
 	memcpy(rdma_xprt->sm_dr.xprt.xp_remote.nb.buf, ss,
 		rdma_xprt->sm_dr.xprt.xp_remote.nb.len);
 
-	rdma_xprt->sm_dr.xprt.xp_ip = gsh_malloc(SOCK_NAME_MAX);
+	rdma_xprt->sm_dr.xprt.xp_ip = mem_alloc(SOCK_NAME_MAX);
 	sprint_sockip(ss, rdma_xprt->sm_dr.xprt.xp_ip,
 	    SOCK_NAME_MAX);
 	rdma_xprt->sm_dr.xprt.xp_port = svc_get_port(ss);

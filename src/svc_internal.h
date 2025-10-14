@@ -30,6 +30,7 @@
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <misc/os_epoll.h>
+#include <arpa/inet.h>
 #include <rpc/rpc_msg.h>
 
 #include "rpc_dplx_internal.h"
@@ -194,7 +195,46 @@ int svc_rqst_evchan_write(SVCXPRT *, struct xdr_ioq *, bool);
 void svc_rqst_xprt_send_complete(SVCXPRT *);
 void svc_rqst_unhook(SVCXPRT *);
 
+/* Allow much more space than we really need for a sock name. An IPV4 address
+ * embedded in IPv6 could use 45 bytes and then if we add a port, that would be
+ * an additional 6 bytes (:65535) for a total of 51, and then one more for NUL
+ * termination. We could use 64 instead of 128.
+ */
+#define SOCK_NAME_MAX 128
+
 typedef struct sockaddr_storage sockaddr_t;
 int svc_get_port(sockaddr_t *);
+
+static inline void *socket_addr(sockaddr_t *addr)
+{
+	switch (addr->ss_family) {
+	case AF_INET:
+		return &(((struct sockaddr_in *)addr)->sin_addr);
+	case AF_INET6:
+		return &(((struct sockaddr_in6 *)addr)->sin6_addr);
+#ifdef RPC_VSOCK
+	case AF_VSOCK:
+		return &(((struct sockaddr_vm *)addr)->svm_cid);
+#endif /* VSOCK */
+	default:
+		return addr;
+	}
+}
+
+static inline bool sprint_sockip(sockaddr_t *addr, char *buf, int len)
+{
+#ifdef RPC_VSOCK
+	if (addr->ss_family == AF_VSOCK) {
+		int rc = snprintf(buf, len, "%d",
+			 ((struct sockaddr_vm *)addr)->svm_cid));
+		return rc >= 0 && rc < len;
+	}
+#endif /* VSOCK */
+
+	if (addr->ss_family != AF_INET && addr->ss_family != AF_INET6)
+		return false;
+
+	return inet_ntop(addr->ss_family, socket_addr(addr), buf, len) != NULL;
+}
 
 #endif				/* TIRPC_SVC_INTERNAL_H */

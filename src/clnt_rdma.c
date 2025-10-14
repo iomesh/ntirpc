@@ -54,8 +54,8 @@
 #include <err.h>
 #include "rpc_com.h"
 #include "clnt_internal.h"
+#include "svc_internal.h"
 #include "rpc_rdma.h"
-#include "gsh_rpc.h"
 
 #define MAX_DEFAULT_FDS		 20000
 
@@ -129,7 +129,7 @@ clnt_rdma_ncreatef(const SVCXPRT *xprt,		/* init but NOT connect()ed */
 		/* Copy remote ip */
 		svc_rdma_ops(&rdma_xprt->sm_dr.xprt);
 
-		rdma_xprt->sm_dr.xprt.xp_ip = gsh_malloc(SOCK_NAME_MAX);
+		rdma_xprt->sm_dr.xprt.xp_ip = mem_alloc(SOCK_NAME_MAX);
 		memcpy(rdma_xprt->sm_dr.xprt.xp_ip, xprt->xp_ip, SOCK_NAME_MAX);
 		rdma_xprt->sm_dr.xprt.xp_port = xprt->xp_port;
 

@@ -52,7 +52,6 @@
 #include <fcntl.h>	//fcntl
 #include <sys/epoll.h>
 #include <urcu-bp.h>
-#include "gsh_rpc.h"
 
 #define EPOLL_SIZE (10)
 /*^ expected number of fd, must be > 0 */
