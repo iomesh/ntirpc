@@ -159,11 +159,13 @@ clnt_rdma_ncreatef(const SVCXPRT *xprt,		/* init but NOT connect()ed */
 		if (rpc_rdma_connect(rdma_xprt)) {
 			__warnx(TIRPC_DEBUG_FLAG_ERROR,
 				"%s: rdma connect failed", __func__);
+			cl->cl_error.re_status = RPC_UNKNOWNADDR;
 			return (cl);
 		}
 		if (rpc_rdma_connect_finalize(rdma_xprt)) {
 			__warnx(TIRPC_DEBUG_FLAG_ERROR,
 				"%s: rdma connect finalize failed", __func__);
+			cl->cl_error.re_status = RPC_UNKNOWNADDR;
 			return (cl);
 		}
 
@@ -178,6 +180,7 @@ clnt_rdma_ncreatef(const SVCXPRT *xprt,		/* init but NOT connect()ed */
 		if (xdr_rdma_create(rdma_xprt)) {
 			__warnx(TIRPC_DEBUG_FLAG_ERROR,
 				"%s: buffer allocation failed", __func__);
+			cl->cl_error.re_status = RPC_SYSTEMERROR;
 			return (cl);
 		}
 	}

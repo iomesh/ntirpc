@@ -2454,7 +2454,7 @@ rpc_rdma_bind_client(RDMAXPRT *rdma_xprt)
 
 		rc = rdma_resolve_addr(rdma_xprt->cm_id, res->ai_src_addr,
 					res->ai_dst_addr,
-					__svc_params->idle_timeout);
+					5000);
 		if (rc) {
 			rc = errno;
 			__warnx(TIRPC_DEBUG_FLAG_ERROR,
@@ -2474,7 +2474,7 @@ rpc_rdma_bind_client(RDMAXPRT *rdma_xprt)
 		}
 
 		rc = rdma_resolve_route(rdma_xprt->cm_id,
-					__svc_params->idle_timeout);
+					5000);
 		if (rc) {
 			rdma_xprt->state = RDMAXS_ERROR;
 			__warnx(TIRPC_DEBUG_FLAG_ERROR,

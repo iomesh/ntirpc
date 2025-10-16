@@ -73,7 +73,9 @@
 #include "svc_ioq.h"
 #include "clnt_internal.h"
 #include "svc_internal.h"
+#ifdef USE_RPC_RDMA
 #include "rpc_rdma.h"
+#endif
 
 static enum xprt_stat clnt_vc_process(struct svc_req *req);
 static struct clnt_ops *clnt_vc_ops(void);
@@ -125,7 +127,7 @@ clnt_vc_data_zalloc(void)
  *      server tranpsorts sharing an underlying bytestream (Matt).
  */
 
-
+#ifdef USE_RPC_RDMA
 /* Create new RDMA client with specified connection parameters */
 CLIENT *
 clnt_rdma_create(int fd, char *host, int port, int recv_sz, int send_sz,
@@ -166,6 +168,7 @@ clnt_rdma_create(int fd, char *host, int port, int recv_sz, int send_sz,
 	/* create rdma_xprt using xprt */
 	return clnt_rdma_ncreatef(xprt, prog, vers, flags, true);
 }
+#endif
 
 /*
  * Create a client handle for a connection.

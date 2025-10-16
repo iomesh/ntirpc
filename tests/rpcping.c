@@ -375,12 +375,17 @@ int main(int argc, char *argv[])
 				perror("get_conn_fd failed");
 				exit(3);
 			}
-			clnt = clnt_rdma_create(fd, "10.53.87.150", 20049, recv_sz,
+#ifdef USE_RPC_RDMA
+			clnt = clnt_rdma_create(fd, host, 20049, recv_sz,
 			    send_sz, page_sz, prog, vers, CLNT_CREATE_FLAG_CLOSE);
 			if (CLNT_FAILURE(clnt)) {
 				rpc_perror(&clnt->cl_error, "clnt_rdma_create failed");
 				exit(4);
 			}
+#else
+			perror("rdma not enabled");
+			exit(4);
+#endif
 		}
 
 		s = &states[i];
