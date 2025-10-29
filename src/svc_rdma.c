@@ -60,7 +60,6 @@
 #include <rpc/svc_rqst.h>
 #include <rpc/svc_auth.h>
 
-static void svc_rdma_ops(SVCXPRT *);
 
 /*
  * svc_rdma_rendezvous: waits for connection request
@@ -95,11 +94,18 @@ svc_rdma_rendezvous(SVCXPRT *xprt)
 	memcpy(rdma_xprt->sm_dr.xprt.xp_remote.nb.buf, ss,
 		rdma_xprt->sm_dr.xprt.xp_remote.nb.len);
 
+	rdma_xprt->sm_dr.xprt.xp_ip = mem_alloc(SOCK_NAME_MAX);
+	sprint_sockip(ss, rdma_xprt->sm_dr.xprt.xp_ip,
+	    SOCK_NAME_MAX);
+	rdma_xprt->sm_dr.xprt.xp_port = svc_get_port(ss);
+
 	__warnx(TIRPC_DEBUG_FLAG_EVENT,
-		"%s:%u local %p remote %p xprt %p", __func__, __LINE__,
+		"%s:%u local %p remote %p xprt %p remote ip %s",
+		__func__, __LINE__,
 		&rdma_xprt->sm_dr.xprt.xp_local.nb,
 		&rdma_xprt->sm_dr.xprt.xp_remote.nb,
-		&rdma_xprt->sm_dr.xprt);
+		&rdma_xprt->sm_dr.xprt,
+		rdma_xprt->sm_dr.xprt.xp_ip);
 
 	svc_rdma_ops(&rdma_xprt->sm_dr.xprt);
 	rdma_xprt->sm_dr.recvsz = req_rdma_xprt->sm_dr.recvsz;
@@ -155,7 +161,7 @@ svc_rdma_rendezvous(SVCXPRT *xprt)
 	__warnx(TIRPC_DEBUG_FLAG_EVENT,
 		"%s:%u New RDMA client connected xprt %p, xp_fd %d, "
 		"qp_num %d, xp_fd %d is_rdma_enabled %d to local port %d "
-		"from remote port %d ref %d epoll %#04x",
+		"from remote port %d ref %d epoll %#04x remote ip %s",
 		__func__, __LINE__,
 		&rdma_xprt->sm_dr.xprt, rdma_xprt->sm_dr.xprt.xp_fd,
 		rdma_xprt->qp->qp_num,
@@ -165,7 +171,8 @@ svc_rdma_rendezvous(SVCXPRT *xprt)
 		rdma_xprt->sm_dr.xprt.xp_remote.nb.buf ?
 		svc_get_port(rdma_xprt->sm_dr.xprt.xp_remote.nb.buf) : 0,
 		rdma_xprt->sm_dr.xprt.xp_refcnt,
-		rdma_xprt->sm_dr.xprt.xp_flags);
+		rdma_xprt->sm_dr.xprt.xp_flags,
+		rdma_xprt->sm_dr.xprt.xp_ip);
 
 	return (XPRT_IDLE);
 }
@@ -220,6 +227,27 @@ svc_rdma_decode(struct svc_req *req)
 			__func__);
 		return (XPRT_DIED);
 	}
+
+	/* in order of likelihood */
+	if (req->rq_msg.rm_direction == CALL) {
+		/* an ordinary call header */
+		goto process_call;
+	}
+
+	if (req->rq_msg.rm_direction == REPLY) {
+		/* reply header (xprt OK) */
+		clnt_req_process_reply(req->rq_xprt, req);
+		return XPRT_IDLE;
+	}
+
+	__warnx(TIRPC_DEBUG_FLAG_WARN,
+		"%s: %p fd %d failed direction %" PRIu32
+		" (will set dead)",
+		__func__, req->rq_xprt, req->rq_xprt->xp_fd,
+		req->rq_msg.rm_direction);
+	return (XPRT_DIED);
+
+process_call:
 
 	/* the checksum */
 	req->rq_cksum = 0;
@@ -368,7 +396,7 @@ svc_rdma_control(SVCXPRT *xprt, const u_int rq, void *in)
 	return (TRUE);
 }
 
-static void
+void
 svc_rdma_ops(SVCXPRT *xprt)
 {
 	static struct xp_ops ops;
