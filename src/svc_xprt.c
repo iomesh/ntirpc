@@ -135,7 +135,7 @@ svc_xprt_init_failure(void)
  * On success, returns with RPC_DPLX_LOCKED
  */
 SVCXPRT *
-svc_xprt_lookup(int fd, svc_xprt_setup_t setup)
+svc_xprt_lookup(int fd, svc_xprt_setup_t setup, const char *tag, const int line)
 {
 	struct rpc_dplx_rec sk;
 	struct rpc_dplx_rec *rec;
@@ -176,7 +176,7 @@ svc_xprt_lookup(int fd, svc_xprt_setup_t setup)
 			xprt->xp_flags = SVC_XPRT_FLAG_INITIAL;
 
 			/* Get ref for caller */
-			SVC_REF(xprt, SVC_REF_FLAG_NONE);
+			SVC_REF2(xprt, SVC_REF_FLAG_NONE, tag, line);
 
 			rec = REC_XPRT(xprt);
 			rpc_dplx_rli(rec);
@@ -198,7 +198,7 @@ svc_xprt_lookup(int fd, svc_xprt_setup_t setup)
 	xprt = &rec->xprt;
 
 	/* lookup reference before unlock ensures shutdown cannot release */
-	SVC_REF(xprt, SVC_REF_FLAG_NONE);
+	SVC_REF2(xprt, SVC_REF_FLAG_NONE, tag, line);
 	rwlock_unlock(&t->lock);
 
 	/* unlocked window here permits shutdown to destroy without release;
@@ -217,7 +217,7 @@ svc_xprt_lookup(int fd, svc_xprt_setup_t setup)
 	}
 
 	/* unlock before release permits releasing here after destroy */
-	SVC_RELEASE(xprt, SVC_RELEASE_FLAG_NONE);
+	SVC_RELEASE2(xprt, SVC_RELEASE_FLAG_NONE, tag, line);
 	return (NULL);
 }
 

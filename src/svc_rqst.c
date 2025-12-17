@@ -1361,7 +1361,7 @@ svc_rqst_epoll_event(struct svc_rqst_rec *sr_rec, struct epoll_event *ev)
 		return (NULL);
 	}
 
-	xprt = svc_xprt_lookup(ev->data.fd, NULL);
+	xprt = svc_xprt_lookup(ev->data.fd, NULL, __func__, __LINE__);
 	if (!xprt) {
 		__warnx(TIRPC_DEBUG_FLAG_SVC_RQST,
 			"%s: fd %d no associated xprt",

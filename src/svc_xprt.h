@@ -56,7 +56,7 @@ typedef void (*svc_xprt_setup_t) (SVCXPRT **);
 /*
  * returns with lock taken
  */
-SVCXPRT *svc_xprt_lookup(int, svc_xprt_setup_t);
+SVCXPRT * svc_xprt_lookup(int fd, svc_xprt_setup_t setup, const char *tag, const int line);
 void svc_xprt_clear(SVCXPRT *);
 
 typedef bool(*svc_xprt_each_func_t) (SVCXPRT *, void *);
