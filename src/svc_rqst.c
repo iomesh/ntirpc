@@ -700,7 +700,6 @@ svc_rqst_rearm_events_locked(SVCXPRT *xprt, uint16_t ev_flags)
 					sr_rec, sr_rec->id_k, sr_rec->ev_refcnt,
 					sr_rec->ev_u.epoll.epoll_fd,
 					sr_rec->sv[0], sr_rec->sv[1], code);
-				SVC_RELEASE(xprt, SVC_RELEASE_FLAG_NONE);
 			} else {
 				__warnx(TIRPC_DEBUG_FLAG_SVC_RQST |
 					TIRPC_DEBUG_FLAG_REFCNT,
@@ -740,7 +739,6 @@ svc_rqst_rearm_events_locked(SVCXPRT *xprt, uint16_t ev_flags)
 					sr_rec, sr_rec->id_k, sr_rec->ev_refcnt,
 					sr_rec->ev_u.epoll.epoll_fd,
 					sr_rec->sv[0], sr_rec->sv[1], code);
-				SVC_RELEASE(xprt, SVC_RELEASE_FLAG_NONE);
 			} else {
 				__warnx(TIRPC_DEBUG_FLAG_SVC_RQST |
 					TIRPC_DEBUG_FLAG_REFCNT,
@@ -1266,15 +1264,7 @@ svc_rqst_xprt_task_send(struct work_pool_entry *wpe)
 		   (unsigned int) rec->xprt.xp_refcnt);
 #endif /* USE_LTTNG_NTIRPC */
 
-	/* atomic barrier (above) should protect following values */
-	if (rec->xprt.xp_refcnt > 1
-	    && !(rec->xprt.xp_flags & SVC_XPRT_FLAG_DESTROYED)) {
-		/* (idempotent) xp_flags and xp_refcnt are set atomic.
-		 * xp_refcnt need more than 1 (this task).
-		 */
-		svc_ioq_write(&rec->xprt);
-	}
-
+	svc_ioq_write(&rec->xprt);
 	SVC_RELEASE(&rec->xprt, SVC_RELEASE_FLAG_NONE);
 }
 
@@ -1371,7 +1361,7 @@ svc_rqst_epoll_event(struct svc_rqst_rec *sr_rec, struct epoll_event *ev)
 		return (NULL);
 	}
 
-	xprt = svc_xprt_lookup(ev->data.fd, NULL);
+	xprt = svc_xprt_lookup(ev->data.fd, NULL, __func__, __LINE__);
 	if (!xprt) {
 		__warnx(TIRPC_DEBUG_FLAG_SVC_RQST,
 			"%s: fd %d no associated xprt",

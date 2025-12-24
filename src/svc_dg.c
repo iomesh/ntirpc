@@ -136,7 +136,7 @@ svc_dg_ncreatef(const int fd, const u_int sendsz, const u_int recvsz,
 	int rc;
 
 	/* atomically find or create shared fd state; ref+1; locked */
-	xprt = svc_xprt_lookup(fd, svc_dg_xprt_setup);
+	xprt = svc_xprt_lookup(fd, svc_dg_xprt_setup, __func__, __LINE__);
 	if (!xprt) {
 		__warnx(TIRPC_DEBUG_FLAG_ERROR,
 			"%s: fd %d svc_xprt_lookup failed",

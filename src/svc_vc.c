@@ -161,7 +161,7 @@ svc_vc_ncreatef(const int fd, const u_int sendsz, const u_int recvsz,
 	int rc;
 
 	/* atomically find or create shared fd state; ref+1; locked */
-	xprt = svc_xprt_lookup(fd, svc_vc_xprt_setup);
+	xprt = svc_xprt_lookup(fd, svc_vc_xprt_setup, __func__, __LINE__);
 	if (!xprt) {
 		__warnx(TIRPC_DEBUG_FLAG_SVC_VC,
 			"%s: fd %d svc_xprt_lookup failed",
@@ -186,6 +186,7 @@ svc_vc_ncreatef(const int fd, const u_int sendsz, const u_int recvsz,
 		__warnx(TIRPC_DEBUG_FLAG_ERROR,
 			"%s: fd %d could not get transport information",
 			__func__, fd);
+		SVC_RELEASE(xprt, SVC_RELEASE_FLAG_NONE);
 		return (NULL);
 	}
 
@@ -196,6 +197,7 @@ svc_vc_ncreatef(const int fd, const u_int sendsz, const u_int recvsz,
 		__warnx(TIRPC_DEBUG_FLAG_ERROR,
 			"%s: fd %d could not get network information",
 			__func__, fd);
+		SVC_RELEASE(xprt, SVC_RELEASE_FLAG_NONE);
 		return (NULL);
 	}
 
@@ -239,6 +241,7 @@ svc_vc_ncreatef(const int fd, const u_int sendsz, const u_int recvsz,
 		__warnx(TIRPC_DEBUG_FLAG_ERROR,
 			"%s: fd %d getsockname failed (%d)",
 			 __func__, fd, rc);
+		SVC_RELEASE(xprt, SVC_RELEASE_FLAG_NONE);
 		return (NULL);
 	}
 
@@ -265,7 +268,7 @@ svc_vc_ncreatef(const int fd, const u_int sendsz, const u_int recvsz,
 
 static SVCXPRT *
 makefd_xprt(const int fd, const u_int sendsz, const u_int recvsz,
-	    struct __rpc_sockinfo *si, u_int flags)
+	    struct __rpc_sockinfo *si, u_int flags, const char *tag, const int line)
 {
 	SVCXPRT *xprt;
 	struct svc_vc_xprt *xd;
@@ -278,7 +281,7 @@ makefd_xprt(const int fd, const u_int sendsz, const u_int recvsz,
 	assert(fd != -1);
 
 	/* atomically find or create shared fd state; ref+1; locked */
-	xprt = svc_xprt_lookup(fd, svc_vc_xprt_setup);
+	xprt = svc_xprt_lookup(fd, svc_vc_xprt_setup, tag, line);
 	if (!xprt) {
 		__warnx(TIRPC_DEBUG_FLAG_SVC_VC,
 			"%s: fd %d svc_xprt_lookup failed",
@@ -291,7 +294,7 @@ makefd_xprt(const int fd, const u_int sendsz, const u_int recvsz,
 						| SVC_XPRT_FLAG_INITIALIZED);
 	if (xp_flags & SVC_XPRT_FLAG_INITIALIZED) {
 		rpc_dplx_rui(rec);
-		XPRT_TRACE(xprt, __func__, __func__, __LINE__);
+		XPRT_TRACE(xprt, __func__, tag, line);
 		return (xprt);
 	}
 
@@ -302,6 +305,7 @@ makefd_xprt(const int fd, const u_int sendsz, const u_int recvsz,
 		__warnx(TIRPC_DEBUG_FLAG_ERROR,
 			"%s: fd %d could not get transport information",
 			__func__, fd);
+		SVC_RELEASE(xprt, SVC_RELEASE_FLAG_NONE);
 		return (NULL);
 	}
 
@@ -312,6 +316,7 @@ makefd_xprt(const int fd, const u_int sendsz, const u_int recvsz,
 		__warnx(TIRPC_DEBUG_FLAG_ERROR,
 			"%s: fd %d could not get network information",
 			__func__, fd);
+		SVC_RELEASE(xprt, SVC_RELEASE_FLAG_NONE);
 		return (NULL);
 	}
 
@@ -338,7 +343,7 @@ makefd_xprt(const int fd, const u_int sendsz, const u_int recvsz,
 
 	/* release */
 	rpc_dplx_rui(rec);
-	XPRT_TRACE(xprt, __func__, __func__, __LINE__);
+	XPRT_TRACE(xprt, __func__, tag, line);
 
 	return (xprt);
 }
@@ -357,7 +362,7 @@ svc_fd_ncreatef(const int fd, const u_int sendsize, const u_int recvsize,
 	assert(fd != -1);
 
 	xprt = makefd_xprt(fd, sendsize, recvsize, &si,
-			   flags & SVC_XPRT_FLAG_CLOSE);
+			   flags & SVC_XPRT_FLAG_CLOSE, __func__, __LINE__);
 	if ((!xprt) || (!(xprt->xp_flags & SVC_XPRT_FLAG_INITIAL)))
 		return (xprt);
 
@@ -371,6 +376,7 @@ svc_fd_ncreatef(const int fd, const u_int sendsize, const u_int recvsize,
 		__warnx(TIRPC_DEBUG_FLAG_ERROR,
 			"%s: fd %d getsockname failed (%d)",
 			 __func__, fd, rc);
+		SVC_RELEASE(xprt, SVC_RELEASE_FLAG_NONE);
 		return (NULL);
 	}
 
@@ -382,6 +388,7 @@ svc_fd_ncreatef(const int fd, const u_int sendsize, const u_int recvsize,
 		__warnx(TIRPC_DEBUG_FLAG_ERROR,
 			"%s: fd %d getpeername failed (%d)",
 			 __func__, fd, rc);
+		SVC_RELEASE(xprt, SVC_RELEASE_FLAG_NONE);
 		return (NULL);
 	}
 	XPRT_TRACE(xprt, __func__, __func__, __LINE__);
@@ -457,7 +464,7 @@ svc_vc_rendezvous(SVCXPRT *xprt)
 	 * make a new transport (re-uses xprt)
 	 */
 	newxprt = makefd_xprt(fd, req_xd->sx_dr.sendsz, req_xd->sx_dr.recvsz,
-			      &si, SVC_XPRT_FLAG_CLOSE);
+			      &si, SVC_XPRT_FLAG_CLOSE, __func__, __LINE__);
 	if ((!newxprt) || (!(newxprt->xp_flags & SVC_XPRT_FLAG_INITIAL))) {
 
 		if (newxprt) {

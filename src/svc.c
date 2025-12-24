@@ -650,7 +650,7 @@ svc_validate_xprt_list(SVCXPRT *xprt)
 {
 	bool code;
 
-	code = (xprt == svc_xprt_lookup(xprt->xp_fd, NULL));
+	code = (xprt == svc_xprt_lookup(xprt->xp_fd, NULL, __func__, __LINE__));
 	if (code)
 		rpc_dplx_rui(REC_XPRT(xprt));
 

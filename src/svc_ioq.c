@@ -253,11 +253,19 @@ again:
 
 		if (result < frag_hdr_size) {
 			/* We had a fragment headerr and didn't manage to send
-			 * the entire thing...
+			 * the entire thing. For example, we want to send 5 bytes data,
+			 * i.e. ABCDE. The header size, i.e. frag_hdr_size, is 4.
+			 * The first, we send 1 byte header, then frag_hdr_size
+			 * substract result, and become 3. The second, we send the left 3
+			 * bytes header and 2 bytes data, i.e. AB. So result is 5, then
+			 * result substract frag_hdr_size, and become 2. And remaning
+			 * substract result, and become 3. So next time, we send the
+			 * remaining 3 bytes, i.e. CDE.
 			 */
 			xioq->frag_hdr_bytes_sent += result;
 			iov[0].iov_base += result;
 			iov[0].iov_len -= result;
+			frag_hdr_size -= result;
 			__warnx(TIRPC_DEBUG_FLAG_SVC_VC,
 				"%s: %p fd %d iov[0].vio_head %p vio_length %z",
 				__func__, xprt, xprt->xp_fd,
@@ -344,16 +352,12 @@ void svc_ioq_write(SVCXPRT *xprt)
 #endif /* USE_LTTNG_NTIRPC */
 		mutex_lock(&rec->writeq.qmutex);
 		if (rc < 0) {
-			/* Dequeue the failed request */
-			TAILQ_REMOVE(&rec->writeq.qh, have, q);
-			mutex_unlock(&rec->writeq.qmutex);
-
-			/* IO failed, destroy rather than releasing */
+			/* IO failed, destroy the XPRT but continue the loop in order to
+			   release resources */
 			__warnx(TIRPC_DEBUG_FLAG_SVC_VC,
 				"%s: %p fd %d About to destroy - rc = %d",
 				__func__, xprt, xprt->xp_fd, rc);
 			SVC_DESTROY(xprt);
-			break;
 		} else if (rc == EWOULDBLOCK){
 			__warnx(TIRPC_DEBUG_FLAG_SVC_VC,
 				"%s: %p fd %d EWOULDBLOCK",
@@ -385,20 +389,20 @@ void svc_ioq_write(SVCXPRT *xprt)
 					   &rec->xprt, (int) xioq->has_blocked);
 #endif /* USE_LTTNG_NTIRPC */
 			}
-
-			/* Dequeue the completed request */
-			TAILQ_REMOVE(&rec->writeq.qh, have, q);
-
-			/* Fetch the next request */
-			have = TAILQ_FIRST(&rec->writeq.qh);
-			mutex_unlock(&rec->writeq.qmutex);
-
-			__warnx(TIRPC_DEBUG_FLAG_SVC_VC,
-				"%s: %p fd %d About to release",
-				__func__, xprt, xprt->xp_fd);
-			SVC_RELEASE(xprt, SVC_RELEASE_FLAG_NONE);
-			XDR_DESTROY(xioq->xdrs);
 		}
+
+		/* Dequeue the completed request */
+		TAILQ_REMOVE(&rec->writeq.qh, have, q);
+
+		/* Fetch the next request */
+		have = TAILQ_FIRST(&rec->writeq.qh);
+		mutex_unlock(&rec->writeq.qmutex);
+
+		__warnx(TIRPC_DEBUG_FLAG_SVC_VC,
+			"%s: %p fd %d About to release",
+			__func__, xprt, xprt->xp_fd);
+		SVC_RELEASE(xprt, SVC_RELEASE_FLAG_NONE);
+		XDR_DESTROY(xioq->xdrs);
 	}
 }
 
