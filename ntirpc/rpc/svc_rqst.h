@@ -60,6 +60,14 @@
 #define SVC_RQST_FLAG_UNLOCK		SVC_XPRT_FLAG_UNLOCK
 #define SVC_RQST_FLAG_EPOLL		0x00080000
 
+/* Set the process-wide event anticipation budget in microseconds.
+ * Default 0 disables polling; valid values are 0..1000. May be called while
+ * service threads run. Each wait snapshots the budget once; this does not
+ * interrupt a wait already in progress. Returns 0, or EINVAL without changing
+ * the current budget. Applications own policy; request types do not alter it.
+ */
+int svc_rqst_set_event_poll_us(uint32_t poll_us);
+
 void svc_rqst_init(uint32_t);
 int svc_rqst_new_evchan(uint32_t *chan_id /* OUT */ , void *u_data,
 			uint32_t flags);

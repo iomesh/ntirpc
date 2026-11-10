@@ -1473,6 +1473,78 @@ svc_rqst_epoll_events(struct svc_rqst_rec *sr_rec, int n_events)
 	return ioq;
 }
 
+static uint32_t event_poll_us;
+static pthread_mutex_t event_poll_lock = PTHREAD_MUTEX_INITIALIZER;
+
+int svc_rqst_set_event_poll_us(uint32_t poll_us)
+{
+	if (poll_us > 1000) {
+		return EINVAL;
+	}
+	atomic_store_uint32_t(&event_poll_us, poll_us);
+	return 0;
+}
+
+/* Keep the clock source and nanosecond conversion behind one interface. */
+static bool svc_rqst_monotonic_ns(uint64_t *timestamp_ns)
+{
+	struct timespec now;
+
+	if (clock_gettime(CLOCK_MONOTONIC, &now) != 0) {
+		return false;
+	}
+	*timestamp_ns = (uint64_t)now.tv_sec * 1000000000ULL + now.tv_nsec;
+	return true;
+}
+
+/* Keep the event owner and dispatch/refcount rules. Each wait takes one
+ * budget snapshot; a concurrent setter affects subsequent waits. */
+static int
+svc_rqst_poll_then_wait(int epoll_fd, struct epoll_event *events,
+			   int max_events, int timeout_ms)
+{
+	uint32_t poll_us = atomic_fetch_uint32_t(&event_poll_us);
+	uint64_t started_ns, now_ns, elapsed_ns;
+	int ready, remaining_ms;
+
+	if (poll_us == 0 || timeout_ms <= 1 ||
+	    !svc_rqst_monotonic_ns(&started_ns)) {
+		return epoll_wait(epoll_fd, events, max_events, timeout_ms);
+	}
+	/* At most one listener anticipates at a time, across all channels.
+	 * Busy listeners never delay other channels acquiring events. */
+	if (pthread_mutex_trylock(&event_poll_lock) != 0) {
+		return epoll_wait(epoll_fd, events, max_events, timeout_ms);
+	}
+
+	for (;;) {
+		ready = epoll_wait(epoll_fd, events, max_events, 0);
+		if (ready != 0) {
+			int saved_errno = errno;
+
+			(void)pthread_mutex_unlock(&event_poll_lock);
+			errno = saved_errno;
+			return ready; /* Includes EINTR and every original error. */
+		}
+		if (!svc_rqst_monotonic_ns(&now_ns)) {
+			(void)pthread_mutex_unlock(&event_poll_lock);
+			return epoll_wait(epoll_fd, events, max_events, timeout_ms);
+		}
+		elapsed_ns = now_ns - started_ns;
+		if (elapsed_ns >= (uint64_t)poll_us * 1000) {
+			break;
+		}
+	}
+	(void)pthread_mutex_unlock(&event_poll_lock);
+	/* The outer loop checks the original absolute RPC expiry. Round UP
+	 * spent milliseconds to avoid extending its blocking wait. */
+	remaining_ms = timeout_ms - (int)((elapsed_ns + 999999) / 1000000);
+	if (remaining_ms < 0) {
+		remaining_ms = 0;
+	}
+	return epoll_wait(epoll_fd, events, max_events, remaining_ms);
+}
+
 static void svc_rqst_epoll_loop(struct work_pool_entry *wpe)
 {
 	struct svc_rqst_rec *sr_rec = 
@@ -1521,10 +1593,10 @@ static void svc_rqst_epoll_loop(struct work_pool_entry *wpe)
 			sr_rec->ev_u.epoll.epoll_fd,
 			timeout_ms);
 
-		n_events = epoll_wait(sr_rec->ev_u.epoll.epoll_fd,
-				      sr_rec->ev_u.epoll.events,
-				      sr_rec->ev_u.epoll.max_events,
-				      timeout_ms);
+		n_events = svc_rqst_poll_then_wait(sr_rec->ev_u.epoll.epoll_fd,
+					 sr_rec->ev_u.epoll.events,
+					 sr_rec->ev_u.epoll.max_events,
+					 timeout_ms);
 
 		if (unlikely(sr_rec->ev_flags & SVC_RQST_FLAG_SHUTDOWN)) {
 			__warnx(TIRPC_DEBUG_FLAG_SVC_RQST,
