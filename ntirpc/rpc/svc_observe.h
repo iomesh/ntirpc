@@ -24,6 +24,9 @@ enum svc_observe_stage {
 	SVC_OBSERVE_REQUEST_ALLOC,
 	SVC_OBSERVE_RECV_INCOMPLETE,
 	SVC_OBSERVE_COMPLETION,
+	SVC_OBSERVE_DISPATCH_CPU,
+	SVC_OBSERVE_RESUME_CPU,
+	SVC_OBSERVE_CPU_UNAVAILABLE,
 	SVC_OBSERVE_DISPATCH_SETUP,
 	SVC_OBSERVE_STAGE_INCOMPLETE,
 	SVC_OBSERVE_STAGE_COUNT
@@ -60,10 +63,10 @@ typedef void (*svc_observe_callback)(enum svc_observe_stage,
 extern "C" {
 #endif
 /* One decision is shared by the request, its output and the application.
- * Overall/stages independently gate their clocks. Completion events are
+ * Overall/stages/CPU independently gate their clocks. Completion events are
  * full-count; duration callbacks contain actual samples, not scaled counts. */
 void svc_observe_register(svc_observe_callback callback, bool overall,
-			  bool stages, uint32_t sample_every);
+			  bool stages, bool cpu, uint32_t sample_every);
 /* The application supplies its already acquired monotonic boundary stamps.
  * No application-specific protocol types or additional clock reads here. */
 void svc_observe_application_begin(struct svc_observation *observation,

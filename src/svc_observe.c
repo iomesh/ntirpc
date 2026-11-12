@@ -8,6 +8,7 @@
 static svc_observe_callback observer;
 static bool observe_overall;
 static bool observe_stages;
+static bool observe_cpu;
 static uint32_t observe_sample_every = 64;
 static __thread uint64_t random_state;
 
@@ -49,12 +50,13 @@ static bool select_sample(void)
 }
 
 void svc_observe_register(svc_observe_callback callback, bool overall,
-			  bool stages, uint32_t sample_every)
+			  bool stages, bool cpu, uint32_t sample_every)
 {
 	assert(sample_every > 0);
 	observer = callback;
 	observe_overall = overall;
 	observe_stages = stages;
+	observe_cpu = cpu;
 	observe_sample_every = sample_every;
 }
 
@@ -81,8 +83,37 @@ uint64_t svc_observe_event_start(void)
 	return observe_stages && select_sample() ? observe_clock() : 0;
 }
 
+static uint64_t observe_cpu_clock(void)
+{
+	struct timespec timestamp;
+	int saved_errno = errno;
+	uint64_t value = 0;
 
+	if (clock_gettime(CLOCK_THREAD_CPUTIME_ID, &timestamp) == 0) {
+		value = (uint64_t)timestamp.tv_sec * 1000000000 + timestamp.tv_nsec;
+	} else {
+		observe_emit(SVC_OBSERVE_CPU_UNAVAILABLE, SVC_OBSERVE_ERROR, 0);
+	}
+	errno = saved_errno;
+	return value;
+}
 
+uint64_t svc_observe_cpu_start(const struct svc_observation *observation)
+{
+	return observer && observe_cpu && observation->sampled ?
+		observe_cpu_clock() : 0;
+}
+
+void svc_observe_cpu_end(enum svc_observe_stage stage, uint64_t started)
+{
+	if (observer && started) {
+		uint64_t completed = observe_cpu_clock();
+
+		if (completed) {
+			observe_emit(stage, SVC_OBSERVE_SUBMITTED, completed - started);
+		}
+	}
+}
 
 void svc_observe_stage_end(enum svc_observe_stage stage, uint64_t started)
 {

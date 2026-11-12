@@ -1208,8 +1208,11 @@ enum xprt_stat svc_request(SVCXPRT *xprt, XDR *xdrs)
 	/* All decode functions basically do a
 	 * return xprt->xp_dispatch.process_cb(req);
 	 */
+	uint64_t cpu_started = svc_observe_cpu_start(&req->rq_observation);
 
 	stat = SVC_DECODE(req);
+	/* Only the local clock value survives: async completion may free req. */
+	svc_observe_cpu_end(SVC_OBSERVE_DISPATCH_CPU, cpu_started);
 
 	if (stat == XPRT_SUSPEND) {
 		/* The rquest is suspended, don't touch the request in any way
@@ -1240,8 +1243,10 @@ static void svc_resume_task(struct work_pool_entry *wpe)
 	svc_observe_stage_end(SVC_OBSERVE_RESUME_SCHEDULE,
 			      req->rq_resume_queued);
 	req->rq_resume_queued = 0;
+	uint64_t cpu_started = svc_observe_cpu_start(&req->rq_observation);
 
 	stat  = req->rq_resume_cb(req);
+	svc_observe_cpu_end(SVC_OBSERVE_RESUME_CPU, cpu_started);
 
 	if (stat == XPRT_SUSPEND) {
 		/* The rquest is suspended, don't touch the request in any way
