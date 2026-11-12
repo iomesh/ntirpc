@@ -43,6 +43,7 @@
 #include "rpc_com.h"
 
 #include <rpc/svc.h>
+#include "svc_observe_internal.h"
 #include <misc/rbtree_x.h>
 #include <misc/opr_queue.h>
 #include <misc/timespec.h>
@@ -1162,6 +1163,7 @@ svc_rqst_xprt_task_recv(struct work_pool_entry *wpe)
 			opr_containerof(wpe, struct xdr_ioq, ioq_wpe);
 	struct rpc_dplx_rec *rec = ioq->rec;
 
+
 	atomic_clear_uint16_t_bits(&ioq->ioq_s.qflags, IOQ_FLAG_WORKING);
 
 #ifdef USE_LTTNG_NTIRPC
@@ -1188,7 +1190,12 @@ svc_rqst_xprt_task_recv(struct work_pool_entry *wpe)
 enum xprt_stat svc_request(SVCXPRT *xprt, XDR *xdrs)
 {
 	enum xprt_stat stat;
+	struct svc_observation observation;
+
+	svc_observe_begin(&observation);
 	struct svc_req *req = __svc_params->alloc_cb(xprt, xdrs);
+
+	req->rq_observation = observation;
 	struct rpc_dplx_rec *rpc_dplx_rec = REC_XPRT(xprt);
 
 	/* Track the request we are processing */
@@ -1197,6 +1204,7 @@ enum xprt_stat svc_request(SVCXPRT *xprt, XDR *xdrs)
 	/* All decode functions basically do a
 	 * return xprt->xp_dispatch.process_cb(req);
 	 */
+
 	stat = SVC_DECODE(req);
 
 	if (stat == XPRT_SUSPEND) {
@@ -1212,6 +1220,7 @@ enum xprt_stat svc_request(SVCXPRT *xprt, XDR *xdrs)
 
 	XDR_DESTROY(req->rq_xdrs);
 
+	svc_observe_end(&req->rq_observation, SVC_OBSERVE_NO_REPLY);
 	__svc_params->free_cb(req, stat);
 
 	return stat;
@@ -1224,6 +1233,10 @@ static void svc_resume_task(struct work_pool_entry *wpe)
 	enum xprt_stat stat;
 
 	/* Resume the request. */
+	svc_observe_stage_end(SVC_OBSERVE_RESUME_SCHEDULE,
+			      req->rq_resume_queued);
+	req->rq_resume_queued = 0;
+
 	stat  = req->rq_resume_cb(req);
 
 	if (stat == XPRT_SUSPEND) {
@@ -1239,11 +1252,13 @@ static void svc_resume_task(struct work_pool_entry *wpe)
 
 	XDR_DESTROY(req->rq_xdrs);
 
+	svc_observe_end(&req->rq_observation, SVC_OBSERVE_NO_REPLY);
 	__svc_params->free_cb(req, stat);
 }
 
 void svc_resume(struct svc_req *req)
 {
+	req->rq_resume_queued = svc_observe_stage_start(&req->rq_observation);
 	req->rq_wpe.fun = svc_resume_task;
 	work_pool_submit(&svc_work_pool, &req->rq_wpe);
 }
@@ -1425,6 +1440,7 @@ svc_rqst_epoll_event(struct svc_rqst_rec *sr_rec, struct epoll_event *ev)
 		 * xp_refcnt need more than 1 (this event).
 		 */
 		ioq->ioq_wpe.fun = fun;
+
 		ioq->rec = rec;
 		return ioq;
 	}
@@ -1623,6 +1639,7 @@ static void svc_rqst_epoll_loop(struct work_pool_entry *wpe)
 
 			if (ioq != NULL) {
 				/* use this hot thread for the first event */
+
 				ioq->ioq_wpe.fun(&ioq->ioq_wpe);
 
 				/* failsafe idle processing after work task */

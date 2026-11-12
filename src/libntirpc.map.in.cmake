@@ -136,6 +136,9 @@ NTIRPC_${NTIRPC_VERSION_BASE} {
     svc_raw_ncreate;
     svc_reg;
     svc_resume;
+    svc_observe_register;
+    svc_observe_application_begin;
+    svc_observe_application_end;
     svc_rqst_set_event_poll_us;
     svc_rqst_new_evchan;
     svc_rqst_evchan_reg;

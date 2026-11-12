@@ -79,6 +79,8 @@ struct xdr_ioq_uv_head {
 	u_int pcount;		/* fill index (0..m) in the current stream */
 };
 
+#include <rpc/svc_observe.h>
+
 struct xdr_ioq {
 	XDR xdrs[1];
 	struct work_pool_entry ioq_wpe;
@@ -93,6 +95,7 @@ struct xdr_ioq {
 	int frag_hdr_bytes_sent; /* Indicates a fragment header has been sent */
 	bool has_blocked;
 	struct rpc_dplx_rec *rec;
+	struct svc_observation ioq_observation;
 };
 
 #define _IOQ(p) (opr_containerof((p), struct xdr_ioq, ioq_s))

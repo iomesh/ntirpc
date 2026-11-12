@@ -307,6 +307,8 @@ typedef enum svc_lookup_result {
 /*
  * Service request
  */
+#include <rpc/svc_observe.h>
+
 struct svc_req {
 	SVCXPRT *rq_xprt;	/* associated transport */
 
@@ -337,6 +339,8 @@ struct svc_req {
 	struct blkin_trace bl_trace;
 #endif
 	uint32_t rq_refcnt;
+	struct svc_observation rq_observation;
+	uint64_t rq_resume_queued;
 };
 
 /*

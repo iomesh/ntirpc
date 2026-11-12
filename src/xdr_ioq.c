@@ -43,6 +43,7 @@
 #include <rpc/auth.h>
 #include <rpc/svc_auth.h>
 #include <rpc/svc.h>
+#include "svc_observe_internal.h"
 #include <rpc/clnt.h>
 #include <stddef.h>
 #include <assert.h>
@@ -765,6 +766,7 @@ xdr_ioq_release(struct poolq_head *ioqh)
 void
 xdr_ioq_destroy(struct xdr_ioq *xioq, size_t qsize)
 {
+	svc_observe_end(&xioq->ioq_observation, SVC_OBSERVE_NO_REPLY);
 	__warnx(TIRPC_DEBUG_FLAG_XDR,
 		"%s() xioq %p",
 		__func__, xioq);

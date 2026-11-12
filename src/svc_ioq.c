@@ -52,6 +52,7 @@
 #include <misc/portable.h>
 #include <rpc/rpc.h>
 #include <rpc/svc.h>
+#include "svc_observe_internal.h"
 #include <rpc/svc_auth.h>
 
 #include <intrinsic.h>
@@ -242,6 +243,7 @@ again:
 
 		if (unlikely(result < 0)) {
 			if (error == EWOULDBLOCK || error == EAGAIN) {
+				svc_observe_event(SVC_OBSERVE_SEND_BLOCKED);
 				/* Socket buffer full; don't destroy */
 				error = EWOULDBLOCK;
 				xioq->has_blocked = true;
@@ -334,8 +336,10 @@ void svc_ioq_write(SVCXPRT *xprt)
 
 	while (have != NULL) {
 		int rc = 0;
+		bool submitted = false;
 
 		xioq = _IOQ(have);
+		svc_observe_send_begin(&xioq->ioq_observation);
 
 		/* Save has blocked before state */
 		bool has_blocked = xioq->has_blocked;
@@ -345,6 +349,12 @@ void svc_ioq_write(SVCXPRT *xprt)
 		 && !(xprt->xp_flags & SVC_XPRT_FLAG_DESTROYED)) {
 			/* all systems are go! */
 			rc = svc_ioq_flushv(xprt, xioq);
+			submitted = rc == 0;
+			if (rc <= 0) {
+				svc_observe_end(&xioq->ioq_observation,
+					       submitted ? SVC_OBSERVE_SUBMITTED :
+					       SVC_OBSERVE_ERROR);
+			}
 		}
 
 #ifdef USE_LTTNG_NTIRPC
@@ -402,6 +412,8 @@ void svc_ioq_write(SVCXPRT *xprt)
 			"%s: %p fd %d About to release",
 			__func__, xprt, xprt->xp_fd);
 		SVC_RELEASE(xprt, SVC_RELEASE_FLAG_NONE);
+		svc_observe_end(&xioq->ioq_observation,
+			       submitted ? SVC_OBSERVE_SUBMITTED : SVC_OBSERVE_ERROR);
 		XDR_DESTROY(xioq->xdrs);
 	}
 }

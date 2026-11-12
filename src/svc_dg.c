@@ -41,6 +41,7 @@
 #endif
 
 #include "config.h"
+#include "svc_observe_internal.h"
 
 /*
  * svc_dg.c, Server side for connectionless RPC.
@@ -353,6 +354,7 @@ svc_dg_decode(struct svc_req *req)
 		__warnx(TIRPC_DEBUG_FLAG_ERROR,
 			"%s: %p fd %d failed (will set dead)",
 			__func__, xprt, xprt->xp_fd);
+		svc_observe_end(&req->rq_observation, SVC_OBSERVE_ERROR);
 		return (XPRT_DIED);
 	}
 
@@ -414,6 +416,7 @@ svc_dg_reply(struct svc_req *req)
 		__warnx(TIRPC_DEBUG_FLAG_ERROR,
 			"%s: %p fd %d xdr_reply_encode failed (will set dead)",
 			__func__, xprt, xprt->xp_fd);
+		svc_observe_end(&req->rq_observation, SVC_OBSERVE_ERROR);
 		return (XPRT_DIED);
 	}
 
@@ -424,6 +427,7 @@ svc_dg_reply(struct svc_req *req)
 		__warnx(TIRPC_DEBUG_FLAG_ERROR,
 			"%s: %p fd %d SVCAUTH_WRAP failed (will set dead)",
 			__func__, xprt, xprt->xp_fd);
+		svc_observe_end(&req->rq_observation, SVC_OBSERVE_ERROR);
 		return (XPRT_DIED);
 	}
 	iov.iov_base = &su[1];
@@ -454,12 +458,16 @@ svc_dg_reply(struct svc_req *req)
 		? CMSG_SPACE(sizeof(struct in_pktinfo))
 		: CMSG_SPACE(sizeof(struct in6_pktinfo));
 
+	req->rq_observation.writing =
+		svc_observe_stage_start(&req->rq_observation);
 	if (sendmsg(xprt->xp_fd, msg, 0) != (ssize_t) slen) {
 		__warnx(TIRPC_DEBUG_FLAG_ERROR,
 			"%s: %p fd %d err %d sendmsg failed (will set dead)",
 			__func__, xprt, xprt->xp_fd, errno);
+		svc_observe_end(&req->rq_observation, SVC_OBSERVE_ERROR);
 		return (XPRT_DIED);
 	}
+	svc_observe_end(&req->rq_observation, SVC_OBSERVE_SUBMITTED);
 
 	return (XPRT_IDLE);
 }

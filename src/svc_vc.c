@@ -69,6 +69,7 @@
 #include <rpc/clnt.h>
 #include <rpc/rpc.h>
 #include <rpc/svc.h>
+#include "svc_observe_internal.h"
 #include <rpc/svc_auth.h>
 #include <rpc/svc_rqst.h>
 #include <rpc/xdr_ioq.h>
@@ -698,6 +699,7 @@ svc_vc_recv(SVCXPRT *xprt)
 	 */
 	have = TAILQ_LAST(&rec->ioq.ioq_uv.uvqh.qh, poolq_head_s);
 	if (!have) {
+
 		xioq = xdr_ioq_create(xd->sx_dr.pagesz, xd->sx_dr.maxrec,
 				      UIO_FLAG_BUFQ);
 		(rec->ioq.ioq_uv.uvqh.qcount)++;
@@ -999,6 +1001,9 @@ again:
 		return SVC_STAT(xprt);
 	}
 
+	/* Complete before rearm/dispatch: neither later events nor inline NFS
+	 * processing belong to this record receive observation. */
+
 	/* finished a request */
 	(rec->ioq.ioq_uv.uvqh.qcount)--;
 	TAILQ_REMOVE(&rec->ioq.ioq_uv.uvqh.qh, &xioq->ioq_s, q);
@@ -1111,6 +1116,10 @@ svc_vc_reply(struct svc_req *req)
 	xdr_tail_update(xioq->xdrs);
 
 	xioq->xdrs[0].x_lib[1] = (void *)req->rq_xprt;
+	/* Output may outlive the input request and run on another worker. */
+	xioq->ioq_observation = req->rq_observation;
+	req->rq_observation = (struct svc_observation){0};
+	svc_observe_reply_queued(&xioq->ioq_observation);
 	svc_ioq_write_now(req->rq_xprt, xioq);
 	return (XPRT_IDLE);
 }

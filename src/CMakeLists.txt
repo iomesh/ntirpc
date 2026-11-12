@@ -46,6 +46,7 @@ SET(ntirpc_common_SRCS
   rpcb_st_xdr.c
   strlcpy.c
   svc.c
+  svc_observe.c
   svc_auth.c
   svc_auth_unix.c
   svc_auth_none.c
@@ -91,6 +92,10 @@ if(USE_LTTNG_NTIRPC)
   add_subdirectory(lttng)
 endif(USE_LTTNG_NTIRPC)
 
+# Keep the observation implementation warning-clean in production builds.
+set_source_files_properties(svc_observe.c PROPERTIES
+  COMPILE_FLAGS "-Wall -Wextra -Werror")
+
 # declares the library
 add_library(ntirpc SHARED
   ${ntirpc_common_SRCS}
@@ -102,6 +107,10 @@ add_library(ntirpc SHARED
 # add required libraries--for Ganesha build, it's ok for them to
 # propagate (i.e., omit PRIVATE)
 target_link_libraries(ntirpc ${SYSTEM_LIBRARIES} ${CMAKE_THREAD_LIBS_INIT})
+
+# Relink when the public observation ABI changes in the generated map.
+set_property(TARGET ntirpc APPEND PROPERTY LINK_DEPENDS
+  "${PROJECT_BINARY_DIR}/libntirpc.map")
 
 # set library version and symbol namespace(s) from gen'd map file
 set_target_properties(ntirpc PROPERTIES LINK_FLAGS
