@@ -1163,6 +1163,10 @@ svc_rqst_xprt_task_recv(struct work_pool_entry *wpe)
 			opr_containerof(wpe, struct xdr_ioq, ioq_wpe);
 	struct rpc_dplx_rec *rec = ioq->rec;
 
+	svc_observe_stage_end(ioq->ioq_observe_direct ? SVC_OBSERVE_RECV_DIRECT :
+			      SVC_OBSERVE_RECV_SCHEDULE,
+			      ioq->ioq_observe_queued);
+	ioq->ioq_observe_queued = 0;
 
 	atomic_clear_uint16_t_bits(&ioq->ioq_s.qflags, IOQ_FLAG_WORKING);
 
@@ -1440,7 +1444,10 @@ svc_rqst_epoll_event(struct svc_rqst_rec *sr_rec, struct epoll_event *ev)
 		 * xp_refcnt need more than 1 (this event).
 		 */
 		ioq->ioq_wpe.fun = fun;
-
+		ioq->ioq_observe_direct = false;
+		ioq->ioq_observe_queued =
+			fun == svc_rqst_xprt_task_recv ?
+			svc_observe_event_start() : 0;
 		ioq->rec = rec;
 		return ioq;
 	}
@@ -1639,7 +1646,7 @@ static void svc_rqst_epoll_loop(struct work_pool_entry *wpe)
 
 			if (ioq != NULL) {
 				/* use this hot thread for the first event */
-
+				ioq->ioq_observe_direct = true;
 				ioq->ioq_wpe.fun(&ioq->ioq_wpe);
 
 				/* failsafe idle processing after work task */

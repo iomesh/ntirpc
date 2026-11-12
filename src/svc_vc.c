@@ -699,13 +699,16 @@ svc_vc_recv(SVCXPRT *xprt)
 	 */
 	have = TAILQ_LAST(&rec->ioq.ioq_uv.uvqh.qh, poolq_head_s);
 	if (!have) {
+		uint64_t receive_started = svc_observe_event_start();
 
 		xioq = xdr_ioq_create(xd->sx_dr.pagesz, xd->sx_dr.maxrec,
 				      UIO_FLAG_BUFQ);
+		svc_observe_receive_begin(&xioq->ioq_receive, receive_started);
 		(rec->ioq.ioq_uv.uvqh.qcount)++;
 		TAILQ_INSERT_TAIL(&rec->ioq.ioq_uv.uvqh.qh, &xioq->ioq_s, q);
 	} else {
 		xioq = _IOQ(have);
+		svc_observe_receive_resume(&xioq->ioq_receive);
 	}
 
 	if (!xd->sx_fbtbc) {
@@ -722,6 +725,7 @@ again:
 						  : TIRPC_DEBUG_FLAG_WARN,
 					"%s: %p fd %d recv errno %d (try again)",
 					"svc_vc_wait", xprt, xprt->xp_fd, code);
+				svc_observe_receive_pause(&xioq->ioq_receive);
 				if (unlikely(svc_rqst_rearm_events(
 						xprt,
 						SVC_XPRT_FLAG_ADDED_RECV))) {
@@ -729,6 +733,7 @@ again:
 						"%s: %p fd %d svc_rqst_rearm_events failed (will set dead)",
 						"svc_vc_wait",
 						xprt, xprt->xp_fd);
+					svc_observe_receive_end(&xioq->ioq_receive, false);
 					SVC_DESTROY(xprt);
 					code = EINVAL;
 				}
@@ -741,6 +746,7 @@ again:
 			__warnx(TIRPC_DEBUG_FLAG_WARN,
 				"%s: %p fd %d recv errno %d (will set dead)",
 				"svc_vc_wait", xprt, xprt->xp_fd, code);
+			svc_observe_receive_end(&xioq->ioq_receive, false);
 			SVC_DESTROY(xprt);
 #ifdef USE_LTTNG_NTIRPC
 			tracepoint(xprt, recv_exit, __func__, __LINE__,
@@ -753,6 +759,7 @@ again:
 			__warnx(TIRPC_DEBUG_FLAG_SVC_VC,
 				"%s: %p fd %d recv closed (will set dead)",
 				"svc_vc_wait", xprt, xprt->xp_fd);
+			svc_observe_receive_end(&xioq->ioq_receive, false);
 			SVC_DESTROY(xprt);
 #ifdef USE_LTTNG_NTIRPC
 			tracepoint(xprt, recv_exit, __func__, __LINE__,
@@ -778,6 +785,7 @@ again:
 				__warnx(TIRPC_DEBUG_FLAG_ERROR,
 					"%s: %p fd %d proxy header failed rest rlen = %z (will set dead)",
 				__func__, xprt, xprt->xp_fd, rlen);
+				svc_observe_receive_end(&xioq->ioq_receive, false);
 				SVC_DESTROY(xprt);
 				return SVC_STAT(xprt);
 			}
@@ -789,6 +797,7 @@ again:
 				__warnx(TIRPC_DEBUG_FLAG_ERROR,
 					"%s: %p fd %d proxy header failed rest1=%08x rest2=%08x (will set dead)",
 				__func__, xprt, xprt->xp_fd, (int) rest[1], (int) rest[2]);
+				svc_observe_receive_end(&xioq->ioq_receive, false);
 				SVC_DESTROY(xprt);
 			}
 
@@ -799,6 +808,7 @@ again:
 				__warnx(TIRPC_DEBUG_FLAG_ERROR,
 					"%s: %p fd %d proxy header failed header rlen = %z (will set dead)",
 				__func__, xprt, xprt->xp_fd, rlen);
+				svc_observe_receive_end(&xioq->ioq_receive, false);
 				SVC_DESTROY(xprt);
 				return SVC_STAT(xprt);
 			}
@@ -811,6 +821,7 @@ again:
 				__warnx(TIRPC_DEBUG_FLAG_ERROR,
 					"%s: %p fd %d proxy header rest len failed header rlen = %z (will set dead)",
 				__func__, xprt, xprt->xp_fd, rlen);
+				svc_observe_receive_end(&xioq->ioq_receive, false);
 				SVC_DESTROY(xprt);
 				return SVC_STAT(xprt);
 			}
@@ -849,6 +860,7 @@ again:
 						"%s: %p fd %d invalid proxy protocol = %0x2 (will set dead)",
 						__func__, xprt, xprt->xp_fd,
 						(int) s.fam);
+					svc_observe_receive_end(&xioq->ioq_receive, false);
 					SVC_DESTROY(xprt);
 					return SVC_STAT(xprt);
 				}
@@ -866,15 +878,18 @@ again:
 					"%s: %p fd %d invalid proxy command = %0x2 (will set dead)",
 					__func__, xprt, xprt->xp_fd,
 					(int) s.ver_cmd);
+				svc_observe_receive_end(&xioq->ioq_receive, false);
 				SVC_DESTROY(xprt);
 				return SVC_STAT(xprt);
 			}
 
+			svc_observe_receive_pause(&xioq->ioq_receive);
 			if (unlikely(svc_rqst_rearm_events(xprt,
 						   SVC_XPRT_FLAG_ADDED_RECV))) {
 				__warnx(TIRPC_DEBUG_FLAG_ERROR,
 					"%s: %p fd %d svc_rqst_rearm_events failed (will set dead)",
 				__func__, xprt, xprt->xp_fd);
+				svc_observe_receive_end(&xioq->ioq_receive, false);
 				SVC_DESTROY(xprt);
 #ifndef USE_LTTNG_NTIRPC
 			}
@@ -901,6 +916,7 @@ again:
 			__warnx(TIRPC_DEBUG_FLAG_ERROR,
 				"%s: %p fd %d fragment is zero (will set dead)",
 				__func__, xprt, xprt->xp_fd);
+			svc_observe_receive_end(&xioq->ioq_receive, false);
 			SVC_DESTROY(xprt);
 #ifdef USE_LTTNG_NTIRPC
 			tracepoint(xprt, recv_exit, __func__, __LINE__,
@@ -931,12 +947,14 @@ again:
 			__warnx(TIRPC_DEBUG_FLAG_SVC_VC,
 				"%s: %p fd %d recv errno %d (try again)",
 				__func__, xprt, xprt->xp_fd, code);
+			svc_observe_receive_pause(&xioq->ioq_receive);
 			if (unlikely(svc_rqst_rearm_events(
 						xprt,
 						SVC_XPRT_FLAG_ADDED_RECV))) {
 				__warnx(TIRPC_DEBUG_FLAG_ERROR,
 					"%s: %p fd %d svc_rqst_rearm_events failed (will set dead)",
 					__func__, xprt, xprt->xp_fd);
+				svc_observe_receive_end(&xioq->ioq_receive, false);
 				SVC_DESTROY(xprt);
 				code = EINVAL;
 			}
@@ -949,6 +967,7 @@ again:
 		__warnx(TIRPC_DEBUG_FLAG_ERROR,
 			"%s: %p fd %d recv errno %d (will set dead)",
 			__func__, xprt, xprt->xp_fd, code);
+		svc_observe_receive_end(&xioq->ioq_receive, false);
 		SVC_DESTROY(xprt);
 #ifdef USE_LTTNG_NTIRPC
 		tracepoint(xprt, recv_exit, __func__, __LINE__,
@@ -961,6 +980,7 @@ again:
 		__warnx(TIRPC_DEBUG_FLAG_SVC_VC,
 			"%s: %p fd %d recv closed (will set dead)",
 			__func__, xprt, xprt->xp_fd);
+		svc_observe_receive_end(&xioq->ioq_receive, false);
 		SVC_DESTROY(xprt);
 #ifdef USE_LTTNG_NTIRPC
 		tracepoint(xprt, recv_exit, __func__, __LINE__,
@@ -982,11 +1002,13 @@ again:
 		__func__, xprt, xprt->xp_fd, rlen, xd->sx_fbtbc, flags);
 
 	if (xd->sx_fbtbc || (flags & UIO_FLAG_MORE)) {
+		svc_observe_receive_pause(&xioq->ioq_receive);
 		if (unlikely(svc_rqst_rearm_events(xprt,
 						   SVC_XPRT_FLAG_ADDED_RECV))) {
 			__warnx(TIRPC_DEBUG_FLAG_ERROR,
 				"%s: %p fd %d svc_rqst_rearm_events failed (will set dead)",
 				__func__, xprt, xprt->xp_fd);
+			svc_observe_receive_end(&xioq->ioq_receive, false);
 			SVC_DESTROY(xprt);
 #ifndef USE_LTTNG_NTIRPC
 		}
@@ -1003,12 +1025,14 @@ again:
 
 	/* Complete before rearm/dispatch: neither later events nor inline NFS
 	 * processing belong to this record receive observation. */
+	svc_observe_receive_end(&xioq->ioq_receive, true);
 
 	/* finished a request */
 	(rec->ioq.ioq_uv.uvqh.qcount)--;
 	TAILQ_REMOVE(&rec->ioq.ioq_uv.uvqh.qh, &xioq->ioq_s, q);
 	xdr_ioq_reset(xioq, 0);
 
+	svc_observe_receive_pause(&xioq->ioq_receive);
 	if (unlikely(svc_rqst_rearm_events(xprt, SVC_XPRT_FLAG_ADDED_RECV))) {
 		__warnx(TIRPC_DEBUG_FLAG_ERROR,
 			"%s: %p fd %d svc_rqst_rearm_events failed (will set dead)",

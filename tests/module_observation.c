@@ -12,7 +12,8 @@ _Static_assert(offsetof(struct svc_req, rq_xprt) == 0, "Transport must remain fi
 
 static unsigned int totals, completions, stages, blocked;
 static volatile unsigned int wall_clocks;
-static unsigned int incomplete;
+static unsigned int records, incomplete;
+static uint64_t record_elapsed, record_active, record_outside;
 static uint64_t durations[SVC_OBSERVE_STAGE_COUNT];
 
 int __real_clock_gettime(clockid_t id, struct timespec *timestamp);
@@ -35,6 +36,13 @@ static void collect(enum svc_observe_stage stage,
 		completions++;
 	else if (stage == SVC_OBSERVE_SEND_BLOCKED)
 		blocked++;
+	else if (stage == SVC_OBSERVE_RECV_RECORD) {
+		records++;
+		record_elapsed = elapsed;
+	} else if (stage == SVC_OBSERVE_RECV_SEGMENT_WALL)
+		record_active = elapsed;
+	else if (stage == SVC_OBSERVE_RECV_OUTSIDE_SEGMENTS)
+		record_outside = elapsed;
 	else if (stage == SVC_OBSERVE_STAGE_INCOMPLETE)
 		incomplete++;
 	else
@@ -44,6 +52,7 @@ static void collect(enum svc_observe_stage stage,
 int main(void)
 {
 	struct svc_observation request, output;
+	struct svc_receive_observation receive;
 
 	svc_observe_register(NULL, true, true, 64);
 	svc_observe_begin(&request);
@@ -135,7 +144,17 @@ int main(void)
 	       durations[SVC_OBSERVE_SEND_FLUSH]);
 
 	svc_observe_register(collect, false, false, 1);
+	before_wall = wall_clocks;
+	assert(!svc_observe_event_start());
+	assert(wall_clocks == before_wall);
 	svc_observe_event(SVC_OBSERVE_SEND_BLOCKED);
 	assert(blocked == 1);
+	svc_observe_register(collect, false, true, 1);
+	svc_observe_receive_begin(&receive, svc_observe_event_start());
+	svc_observe_receive_pause(&receive);
+	svc_observe_receive_resume(&receive);
+	svc_observe_receive_end(&receive, true);
+	svc_observe_receive_end(&receive, true);
+	assert(records == 1 && record_elapsed == record_active + record_outside);
 	return 0;
 }

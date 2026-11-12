@@ -96,6 +96,9 @@ struct xdr_ioq {
 	bool has_blocked;
 	struct rpc_dplx_rec *rec;
 	struct svc_observation ioq_observation;
+	struct svc_receive_observation ioq_receive;
+	uint64_t ioq_observe_queued;
+	bool ioq_observe_direct;
 };
 
 #define _IOQ(p) (opr_containerof((p), struct xdr_ioq, ioq_s))

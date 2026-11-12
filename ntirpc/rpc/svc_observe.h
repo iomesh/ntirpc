@@ -14,9 +14,15 @@ enum svc_observe_stage {
 	SVC_OBSERVE_REPLY_ENCODE,
 	SVC_OBSERVE_SEND_QUEUE,
 	SVC_OBSERVE_SEND_FLUSH,
+	SVC_OBSERVE_RECV_SCHEDULE,
 	SVC_OBSERVE_RESUME_SCHEDULE,
+	SVC_OBSERVE_RECV_DIRECT,
 	SVC_OBSERVE_SEND_BLOCKED,
+	SVC_OBSERVE_RECV_RECORD,
+	SVC_OBSERVE_RECV_SEGMENT_WALL,
+	SVC_OBSERVE_RECV_OUTSIDE_SEGMENTS,
 	SVC_OBSERVE_REQUEST_ALLOC,
+	SVC_OBSERVE_RECV_INCOMPLETE,
 	SVC_OBSERVE_COMPLETION,
 	SVC_OBSERVE_DISPATCH_SETUP,
 	SVC_OBSERVE_STAGE_INCOMPLETE,
@@ -27,6 +33,14 @@ enum svc_observe_result {
 	SVC_OBSERVE_SUBMITTED,
 	SVC_OBSERVE_ERROR,
 	SVC_OBSERVE_NO_REPLY
+};
+
+/* One sample decision follows a TCP record across partial receive events.
+ * Segment wall includes blocking recv and preemption; it is not CPU time. */
+struct svc_receive_observation {
+	uint64_t started;
+	uint64_t segment;
+	uint64_t active;
 };
 
 struct svc_observation {

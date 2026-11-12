@@ -76,6 +76,10 @@ uint64_t svc_observe_stage_start(const struct svc_observation *observation)
 		observe_clock() : 0;
 }
 
+uint64_t svc_observe_event_start(void)
+{
+	return observe_stages && select_sample() ? observe_clock() : 0;
+}
 
 
 
@@ -156,4 +160,49 @@ void svc_observe_end(struct svc_observation *observation,
 		}
 		observe_emit(SVC_OBSERVE_COMPLETION, result, 0);
 	}
+}
+
+void svc_observe_receive_begin(struct svc_receive_observation *receive,
+			       uint64_t started)
+{
+	*receive = (struct svc_receive_observation){
+		.started = started,
+		.segment = started,
+	};
+}
+
+void svc_observe_receive_resume(struct svc_receive_observation *receive)
+{
+	if (receive->started) {
+		receive->segment = observe_clock();
+	}
+}
+
+void svc_observe_receive_pause(struct svc_receive_observation *receive)
+{
+	if (receive->segment) {
+		receive->active += observe_clock() - receive->segment;
+		receive->segment = 0;
+	}
+}
+
+void svc_observe_receive_end(struct svc_receive_observation *receive,
+			     bool complete)
+{
+	if (!receive->started) {
+		return;
+	}
+	svc_observe_receive_pause(receive);
+	uint64_t elapsed = observe_clock() - receive->started;
+	uint64_t active = receive->active;
+
+	receive->started = 0;
+	if (!complete) {
+		svc_observe_event(SVC_OBSERVE_RECV_INCOMPLETE);
+		return;
+	}
+	observe_emit(SVC_OBSERVE_RECV_RECORD, SVC_OBSERVE_SUBMITTED, elapsed);
+	observe_emit(SVC_OBSERVE_RECV_SEGMENT_WALL, SVC_OBSERVE_SUBMITTED, active);
+	observe_emit(SVC_OBSERVE_RECV_OUTSIDE_SEGMENTS, SVC_OBSERVE_SUBMITTED,
+		     elapsed - active);
 }
